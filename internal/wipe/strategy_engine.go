@@ -10,8 +10,8 @@ import (
 	"wipedisk_enterprise/internal/system"
 )
 
-// wipeWithStrategy выполняет затирание с использованием стратегии
-func wipeWithStrategy(ctx context.Context, disk system.DiskInfo, cfg *config.Config, logger *logging.EnterpriseLogger, dryRun bool, maxDuration time.Duration, mode WipeMode, profile string) *WipeOperation {
+// WipeWithStrategy выполняет затирание с использованием стратегии
+func WipeWithStrategy(ctx context.Context, disk system.DiskInfo, cfg *config.Config, logger *logging.EnterpriseLogger, dryRun bool, maxDuration time.Duration, mode WipeMode, profile string) *WipeOperation {
 	// Создаем конфигурацию для затирания
 	wipeConfig := &WipeConfig{
 		Passes:       getPassesForMode(cfg, mode),

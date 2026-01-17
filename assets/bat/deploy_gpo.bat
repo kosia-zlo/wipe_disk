@@ -2,10 +2,10 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-:: WipeDisk Enterprise 1.2.1.1 GPO Deployment Script
+:: WipeDisk Enterprise 1.2.2 GPO Deployment Script
 :: ===================================================
 
-set "VERSION=1.2.1.1"
+set "WIPE_VERSION=1.2.2"
 set "TITLE=WipeDisk Enterprise GPO Deployment"
 set "LOGFILE=%TEMP%\wipedisk_gpo_deploy.log"
 
@@ -19,7 +19,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo ============================================
-echo   WipeDisk Enterprise %VERSION% GPO Deployment
+echo   WipeDisk Enterprise %WIPE_VERSION% GPO Deployment
 echo ============================================
 echo.
 
@@ -91,7 +91,7 @@ echo ============================================
 echo        УСПЕШНОЕ РАЗВЕРТЫВАНИЕ
 echo ============================================
 echo.
-echo  WipeDisk Enterprise %VERSION% успешно установлен
+echo  WipeDisk Enterprise %WIPE_VERSION% успешно установлен
 echo.
 echo  Пути:
 echo    Исполняемый файл: %INSTALL_DIR%\wipedisk.exe
@@ -178,7 +178,7 @@ echo exit /b %%errorlevel%%
 :: Создание PowerShell скрипта для GPO
 (
 echo # WipeDisk Enterprise GPO Deployment Script
-echo # Version %VERSION%
+echo # Version %WIPE_VERSION%
 echo.
 echo Write-Host "WipeDisk Enterprise GPO Deployment" -ForegroundColor Green
 echo Write-Host "================================" -ForegroundColor Green

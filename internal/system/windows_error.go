@@ -4,7 +4,6 @@ import "strings"
 
 const (
 	// Windows error codes
-	ERROR_DISK_FULL = 0x70
 	ERROR_NOT_READY = 0x15
 )
 

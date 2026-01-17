@@ -132,7 +132,7 @@ func GenerateEnterpriseReport(operations []*wipe.WipeOperation, cfg *config.Conf
 			Hostname:    hostname,
 			ScanDate:    startTime,
 			ScanMode:    getScanMode(dryRun, profile),
-			Version:     "1.2.1.1",
+			Version:     "1.2.2",
 			RunID:       fmt.Sprintf("run_%d", startTime.UnixNano()),
 			Duration:    endTime.Sub(startTime).String(),
 		},

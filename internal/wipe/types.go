@@ -1,6 +1,8 @@
 package wipe
 
-import "time"
+import (
+	"time"
+)
 
 type WipeOperation struct {
 	ID         string
@@ -25,4 +27,25 @@ type SystemDiskPolicy struct {
 	MaxConcurrentIO int
 	TimeoutMinutes  int
 	ForceWipeSSD    bool
+}
+
+// ProgressInfo информация о прогрессе затирания
+type ProgressInfo struct {
+	BytesWritten uint64
+	SpeedMBps    float64
+	Percentage   float64
+	CurrentFile  string
+	Error        error
+	Done         bool
+}
+
+// WipeResult результат операции затирания
+type WipeResult struct {
+	Success      bool
+	BytesWritten uint64
+	Duration     time.Duration
+	SpeedMBps    float64
+	FilesCreated int
+	Error        error
+	Cancelled    bool
 }

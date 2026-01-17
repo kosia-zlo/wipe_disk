@@ -80,7 +80,7 @@ type AggregatedSummary struct {
 func GenerateReport(operations []*wipe.WipeOperation, cfg *config.Config, engine, profile string, dryRun bool, maxDuration time.Duration, startTime, endTime time.Time, exitCode int) (*Report, error) {
 	report := &Report{
 		RunID:       fmt.Sprintf("run_%d", startTime.UnixNano()),
-		Version:     "1.2.1.1",
+		Version:     "1.2.2",
 		Timestamp:   startTime,
 		Config:      configToMap(cfg),
 		Engine:      engine,

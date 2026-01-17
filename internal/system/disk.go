@@ -11,6 +11,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// ERROR_DISK_FULL код ошибки Windows для "Недостаточно места на диске"
+const ERROR_DISK_FULL = 112
+
 // DiskInfo contains information about a disk
 type DiskInfo struct {
 	Letter     string
@@ -174,6 +177,11 @@ func checkWriteAccess(drive string) bool {
 	return true
 }
 
+// CheckWriteAccess public function for external use
+func CheckWriteAccess(drive string) bool {
+	return checkWriteAccess(drive)
+}
+
 // ValidatePath validates and normalizes path
 func ValidatePath(path string) (string, error) {
 	if path == "" {
@@ -262,3 +270,91 @@ var (
 	kernel32                = syscall.NewLazyDLL("kernel32.dll")
 	procGetDiskFreeSpaceExW = kernel32.NewProc("GetDiskFreeSpaceExW")
 )
+
+// IsDiskFullError проверяет, является ли ошибка ошибкой "Недостаточно места на диске"
+func IsDiskFullError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Проверяем через golang.org/x/sys/windows
+	if errno, ok := err.(windows.Errno); ok {
+		return errno == ERROR_DISK_FULL
+	}
+
+	// Дополнительная проверка по тексту ошибки
+	errStr := err.Error()
+	return errStr == "write: no space left on device" ||
+		errStr == "There is not enough space on the disk" ||
+		errStr == "Недостаточно места на диске"
+}
+
+// GetDiskInfoForPath получает информацию о конкретном диске по пути
+func GetDiskInfoForPath(drivePath string) (*DiskInfo, error) {
+	drivePath = normalizePath(drivePath)
+
+	var freeBytesAvailable, totalBytes, freeBytes uint64
+
+	err := windows.GetDiskFreeSpaceEx(
+		windows.StringToUTF16Ptr(drivePath),
+		&freeBytesAvailable,
+		&totalBytes,
+		&freeBytes,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка получения информации о диске: %w", err)
+	}
+
+	// Определение типа диска
+	diskType := getDiskType(drivePath)
+
+	// Проверка системного диска
+	isSystem := isSystemDisk(drivePath)
+
+	return &DiskInfo{
+		Letter:     drivePath,
+		Type:       diskType,
+		TotalSize:  totalBytes,
+		FreeSize:   freeBytes,
+		IsSystem:   isSystem,
+		IsWritable: checkWriteAccess(drivePath),
+	}, nil
+}
+
+// normalizePath нормализует путь к диску
+func normalizePath(path string) string {
+	if len(path) == 1 {
+		return path + ":"
+	}
+	if len(path) == 2 && path[1] == ':' {
+		return path
+	}
+	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
+		return path[:2]
+	}
+	return path
+}
+
+// getDiskType определяет тип диска (HDD/SSD)
+func getDiskType(drivePath string) string {
+	// В реальной реализации здесь будет определение типа диска
+	// через WMI или другие Windows API
+	// Пока возвращаем Unknown
+	return "Unknown"
+}
+
+// isSystemDisk проверяет, является ли диск системным
+func isSystemDisk(drivePath string) bool {
+	// Получаем путь к системной директории
+	sysDir, err := windows.GetSystemDirectory()
+	if err != nil {
+		return false
+	}
+
+	if len(sysDir) >= 2 {
+		systemDrive := sysDir[:2]
+		return normalizePath(drivePath) == systemDrive
+	}
+
+	return false
+}

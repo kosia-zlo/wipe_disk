@@ -286,7 +286,7 @@ func (mo *MaintenanceOrchestrator) wipeFreeSpace(ctx context.Context, plan *Main
 		}
 
 		// Выполняем затирание
-		op := wipe.WipeWithEngine(ctx, disk, mo.config, mo.logger, false, 0, wipe.WipeEngine("internal"), "standard", "balanced")
+		op := wipe.WipeWithStrategy(ctx, disk, mo.config, mo.logger, false, 0, wipe.ModeStandard, "balanced")
 		if op.Status == "COMPLETED" {
 			totalWiped += op.BytesWiped
 		} else if op.Error != "" {

@@ -2,10 +2,10 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-:: WipeDisk Enterprise 1.2.1.1 Professional Menu
+:: WipeDisk Enterprise 1.2.2 Professional Menu
 :: =============================================
 
-set "VERSION=1.2.1.1"
+set "VERSION=1.2.2"
 set "TITLE=WipeDisk Enterprise %VERSION% [ADMIN]"
 set "LOGFILE=%TEMP%\wipedisk_menu.log"
 

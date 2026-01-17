@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	Version = "1.2.1.1"
+	Version = "1.2.2"
 	AppName = "WipeDisk Enterprise"
 
 	// Exit codes
@@ -305,7 +305,7 @@ func runWipe(cmd *cobra.Command, args []string) error {
 		default:
 		}
 
-		op := wipe.WipeWithEngine(ctx, disk, cfg, logger, dryRun, maxDuration, wipe.WipeEngine(engine), validMode, profile)
+		op := wipe.WipeWithStrategy(ctx, disk, cfg, logger, dryRun, maxDuration, validMode, profile)
 		operations = append(operations, op)
 
 		switch op.Status {
@@ -861,6 +861,13 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 }
 
 func main() {
+	// Проверяем интерактивный режим (без аргументов)
+	if len(os.Args) == 1 {
+		initInteractiveMode()
+		return
+	}
+
+	// Режим с флагами - используем Cobra
 	if err := rootCmd.Execute(); err != nil {
 		// Корректные exit codes
 		if strings.Contains(err.Error(), "требуются права администратора") ||

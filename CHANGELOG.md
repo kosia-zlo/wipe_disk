@@ -6,52 +6,92 @@
 
 ---
 
-## [1.2.1.1] - 2026-01-17
+## [1.2.2] - 2026-01-17
 
 ### Fixed
-- **Architecture compliance**: Removed Linux syscalls from internal/system/disk.go, ensuring Windows-only compatibility
-- **Struct field alignment**: Fixed WipeOperation field references from `op.Target` to `op.Disk` across reporting modules
-- **Function naming conflicts**: Resolved duplicate `FillPattern` function by renaming to `FillBufferPattern` in internal/wipe/buffer_pool.go
-- **Import dependencies**: Added missing internal/cli and internal/system imports in enterprise reporting module
-- **Build errors**: Eliminated undefined `config.EnsureDirectories` function call in main.go
-- **Parameter mismatches**: Fixed generateAndSaveReport function signature inconsistencies
-
-### Changed
-- **Enterprise reporting**: Enhanced security audit reports with Russian language localization
-- **Risk assessment**: Updated risk levels to Russian (Низкий/Средний/Высокий/Критический)
-- **Category names**: Translated security categories to Russian (Остатки данных, Системные артефакты, etc.)
-- **Report metadata**: Updated report titles and descriptions for Russian enterprise environments
-- **Cleanup integration**: Added system cleanup operations to enterprise reporting framework
+- **Critical Wipe Engine Bug**: Исправлен баг с множественными файлами - реализован Persistent File Wipe с ОДНИМ файлом `wipedisk_reserve.tmp`
+- **Windows Error Handling**: Добавлена корректная обработка ERROR_DISK_FULL (код 112) через golang.org/x/sys/windows
+- **Data Integrity**: Добавлен обязательный `f.Sync()` перед закрытием файла для гарантированной записи на физический носитель
+- **Progress Reporting**: Исправлено обновление прогресса - теперь отправляется каждую секунду в реальном времени
 
 ### Added
-- **System cleanup operations**: Implemented comprehensive cleanup module with print queue, DNS cache, browser cache, temp files, and old logs cleanup
-- **CLI cleanup commands**: Added `wipedisk cleanup` command with operation listing, category-based execution, and dry-run support
-- **Enterprise cleanup categories**: New "Системная очистка" category in security audit reports
-- **Browser cleanup support**: Automatic cleanup for Chrome, Firefox, and Yandex Browser caches and cookies
-- **Print queue management**: Safe print queue cleanup with service restart functionality
-- **DNS cache management**: Complete DNS cache reset with winsock repair
-- **Maintenance integration**: Cleanup operations integrated with existing maintenance framework
+- **Native Maintenance Module**: Полностью перенесены функции из BAT-скрипта в нативный Go код
+  - `FlushDNS` - очистка DNS кэша через `ipconfig /flushdns`
+  - `CleanTemp` - безопасное удаление `%TEMP%` и `C:\Windows\Temp`
+  - `ClearPrintSpooler` - остановка/очистка/запуск службы Spooler
+  - `EmptyRecycleBin` - очистка корзины на всех дисках через Windows API
+- **Hybrid CLI Interface**: Двойной режим работы
+  - Интерактивное меню при запуске без аргументов
+  - CLI флаги для автоматизации через Cobra
+- **Administrator Rights Check**: Обязательная проверка прав администратора при старте
+- **Signal Handling**: Корректная обработка Ctrl+C через `context.WithCancel` с удалением временных файлов
+
+### Changed
+- **Wipe Engine**: Полностью переработан с использованием Persistent File подхода
+- **Error Handling**: Устранены все `panic()` - только структурированные ошибки
+- **User Experience**: Улучшен интерфейс с прогресс-баром и детальной информацией
+- **Security**: Усилены проверки безопасности при работе с системными дисками
 
 ### Security
-- **Enhanced data remnant detection**: Improved identification of incomplete wipe operations
-- **System artifact analysis**: Better detection of system configuration exposure risks
-- **Temporary file monitoring**: Enhanced tracking of temp file creation and cleanup
-- **Browser privacy protection**: Comprehensive browser data cleanup for enterprise environments
-- **Print queue security**: Secure cleanup of potentially sensitive print job remnants
-
-### Stability
-- **Error handling**: Improved graceful error handling in cleanup operations
-- **Service management**: Robust print queue service restart with proper error recovery
-- **Resource cleanup**: Enhanced memory and file handle management in cleanup operations
-- **Concurrent operations**: Thread-safe cleanup operation execution
-- **Logging integration**: Enterprise-grade logging for all cleanup activities
+- **Enhanced File Operations**: Безопасное создание временных файлов с эксклюзивными флагами
+- **Guaranteed Cleanup**: Гарантированное удаление временных файлов при любом исходе операции
+- **Context Support**: Полная поддержка контекста для корректной отмены операций
+- **Enterprise Logging**: Улучшенное логирование всех операций с детальной диагностикой
 
 ### Performance
-- **Optimized cleanup sequencing**: Efficient cleanup operation ordering for minimal system impact
-- **Parallel cleanup support**: Foundation for concurrent cleanup operations
-- **Resource monitoring**: Real-time resource usage tracking during cleanup operations
-- **Cache optimization**: Improved browser cache cleanup performance
-- **Memory efficiency**: Reduced memory footprint in cleanup operations
+- **Single File Strategy**: Оптимизация производительности через один файл вместо множества мелких
+- **Memory Efficiency**: Эффективное использование буферов по 1MB с минимальными аллокациями
+- **Real-time Progress**: Оптимизирован механизм отчетности прогресса без блокировки основного потока
+- **Native Operations**: Замена BAT-скриптов на нативные вызовы Windows API
+
+---
+
+## [1.2.1.1] - 2026-01-17
+
+### Исправлено
+- **Соблюдение архитектуры**: Удалены системные вызовы Linux из `internal/system/disk.go` для обеспечения совместимости только с Windows.
+- **Выравнивание полей структур**: Исправлены ссылки на поля `WipeOperation` с `op.Target` на `op.Disk` в модулях отчетности.
+- **Конфликты именования функций**: Устранено дублирование функции `FillPattern` путем переименования в `FillBufferPattern` в `internal/wipe/buffer_pool.go`.
+- **Зависимости импорта**: Добавлены недостающие импорты `internal/cli` и `internal/system` в модуле корпоративной отчетности.
+- **Ошибки сборки**: Удален вызов неопределенной функции `config.EnsureDirectories` в `main.go`.
+- **Несоответствие параметров**: Исправлены несоответствия в сигнатуре функции `generateAndSaveReport`.
+
+### Изменено
+- **Корпоративная отчетность**: Улучшены отчеты об аудите безопасности благодаря локализации на русский язык.
+- **Оценка рисков**: Обновлены уровни риска на русский язык (Низкий/Средний/Высокий/Критический).
+- **Названия категорий**: Переведены категории безопасности (Остатки данных, Системные артефакты и т. д.).
+- **Метаданные отчетов**: Обновлены заголовки и описания отчетов для российских корпоративных сред.
+- **Интеграция очистки**: В платформу корпоративной отчетности добавлены операции по очистке системы.
+
+### Добавлено
+- **Операции по очистке системы**: Реализован комплексный модуль очистки (очередь печати, DNS-кеш, кеш браузеров, временные файлы и логи).
+- **Команды очистки в CLI**: Добавлена команда `wipedisk cleanup` с поддержкой листинга, выбора категорий и режима dry-run.
+- **Категории корпоративной очистки**: Новая категория «Системная очистка» в отчетах об аудите безопасности.
+- **Поддержка очистки браузеров**: Автоматическая очистка данных для Chrome, Firefox и Яндекс.Браузера.
+- **Управление очередью печати**: Безопасная очистка очереди с функционалом перезапуска службы.
+- **Управление DNS-кешем**: Полный сброс DNS-кеша с восстановлением Winsock.
+- **Интеграция с обслуживанием**: Операции очистки интегрированы в существующую систему техподдержки.
+
+### Безопасность
+- **Улучшенное обнаружение остатков данных**: Повышена точность идентификации незавершенных операций стирания.
+- **Анализ системных артефактов**: Улучшено обнаружение рисков раскрытия конфигурации системы.
+- **Мониторинг временных файлов**: Расширенное отслеживание жизненного цикла временных файлов.
+- **Защита конфиденциальности в браузерах**: Глубокая очистка данных браузеров для корпоративного сектора.
+- **Безопасность очереди печати**: Защищенное удаление временных файлов заданий печати.
+
+### Стабильность
+- **Обработка ошибок**: Улучшена устойчивость кода в операциях очистки.
+- **Управление службами**: Надежный перезапуск службы очереди печати с восстановлением.
+- **Очистка ресурсов**: Оптимизировано управление памятью и файловыми дескрипторами.
+- **Конкурентные операции**: Обеспечена потокобезопасность (thread-safety) при выполнении очистки.
+- **Интеграция логирования**: Добавлено расширенное логирование всех системных операций.
+
+### Производительность
+- **Оптимизация последовательности**: Настроен эффективный порядок выполнения задач для снижения нагрузки на CPU/Disk.
+- **Поддержка параллелизма**: Подготовлена архитектура для одновременного выполнения операций очистки.
+- **Мониторинг ресурсов**: Добавлен трекинг использования ресурсов в реальном времени.
+- **Оптимизация кеширования**: Ускорена процедура очистки кэша браузеров.
+- **Эффективность памяти**: Снижен объем выделяемой памяти (RAM footprint) в модуле очистки.
 
 ---
 
