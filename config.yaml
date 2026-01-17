@@ -1,0 +1,46 @@
+security:
+  require_admin: false
+  block_servers: true
+  require_confirmation: false
+  excluded_drives: ["A:", "B:"]
+  protected_paths:
+    - "C:\\Windows"
+    - "C:\\Program Files"
+    - "C:\\Program Files (x86)"
+    - "C:\\Users"
+
+wipe:
+  enabled: true
+  ssd_method: "cipher"
+  hdd_method: "random"
+  ssd_passes: 1
+  hdd_passes: 1
+  chunk_size: 4194304
+  enable_trim: true
+  max_concurrent: 2
+  max_speed_mbps: 100
+  max_duration: "2h"
+  file_delay_ms: 100
+
+logging:
+  level: "INFO"
+  file: ""
+  max_size_mb: 100
+  max_files: 5
+  structured: true
+  siem_enabled: false
+  siem_server: ""
+
+reporting:
+  enabled: true
+  local_path: "./reports"
+  network_path: ""
+  format: "json"
+
+clean:
+  enabled: false
+  include_paths: []
+  exclude_paths: []
+  exclude_patterns: ["*.tmp", "*.temp", "*.log"]
+  max_file_size: 104857600
+  min_file_age: 7
