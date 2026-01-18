@@ -5,6 +5,7 @@ import "strings"
 const (
 	// Windows error codes
 	ERROR_NOT_READY = 0x15
+	ERROR_DISK_FULL = 112
 )
 
 func IsWindowsError(err error, code uint32) bool {

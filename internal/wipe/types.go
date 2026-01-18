@@ -31,12 +31,14 @@ type SystemDiskPolicy struct {
 
 // ProgressInfo информация о прогрессе затирания
 type ProgressInfo struct {
-	BytesWritten uint64
-	SpeedMBps    float64
-	Percentage   float64
-	CurrentFile  string
-	Error        error
-	Done         bool
+	BytesWritten  uint64
+	SpeedMBps     float64
+	Percentage    float64
+	CurrentFile   string
+	Error         error
+	Done          bool
+	StartTime     time.Time
+	EstimatedTime time.Duration
 }
 
 // WipeResult результат операции затирания

@@ -11,22 +11,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// ERROR_DISK_FULL код ошибки Windows для "Недостаточно места на диске"
-const ERROR_DISK_FULL = 112
-
-// DiskInfo contains information about a disk
-type DiskInfo struct {
-	Letter     string
-	Type       string // HDD/SSD/Unknown
-	TotalSize  uint64
-	FreeSize   uint64
-	IsSystem   bool
-	IsWritable bool
-	Model      string
-	Serial     string
-	Interface  string
-}
-
 // GetDiskInfo gets information about disks via Windows API
 func GetDiskInfo(verbose bool) ([]DiskInfo, error) {
 	var disks []DiskInfo
@@ -60,7 +44,7 @@ func GetDiskSpace(drive string, verbose bool) (uint64, uint64) {
 
 	var freeBytesAvailable, totalBytes, freeBytes uint64
 
-	// Call GetDiskFreeSpaceExW
+	// Call GetDiskFreeSpaceExW with proper uintptr casting
 	ret, _, err := procGetDiskFreeSpaceExW.Call(
 		uintptr(unsafe.Pointer(drivePath)),
 		uintptr(unsafe.Pointer(&freeBytesAvailable)),
@@ -182,6 +166,115 @@ func CheckWriteAccess(drive string) bool {
 	return checkWriteAccess(drive)
 }
 
+// ValidateDrive validates if drive exists and shows available drives if not
+func ValidateDrive(drive string) error {
+	if drive == "" {
+		return fmt.Errorf("пустой путь к диску")
+	}
+
+	// Normalize drive path
+	drive = normalizePath(drive)
+
+	// Get all available drives
+	availableDrives := getLogicalDrives()
+
+	// Check if requested drive exists
+	for _, availableDrive := range availableDrives {
+		if normalizePath(availableDrive) == drive {
+			// Check if drive is accessible
+			if _, err := os.Stat(drive + "\\"); err != nil {
+				return fmt.Errorf("диск %s недоступен: %w", drive, err)
+			}
+			return nil
+		}
+	}
+
+	// Drive not found, show error with available options
+	return fmt.Errorf("ошибка: путь %s недоступен. Пожалуйста, выберите диск из списка доступных: %v",
+		drive, availableDrives)
+}
+
+// GetAvailableDrives returns list of available local drives with types
+func GetAvailableDrives() []DriveInfo {
+	var drives []DriveInfo
+
+	// Use Windows API to get drive strings
+	buffer := make([]uint16, 256)
+	_, err := windows.GetLogicalDriveStrings(uint32(len(buffer)), &buffer[0])
+	if err != nil {
+		// Fallback to simple method
+		for c := 'A'; c <= 'Z'; c++ {
+			drive := string(c) + ":"
+			if _, err := os.Stat(drive + "\\"); err == nil {
+				driveType := windows.GetDriveType(windows.StringToUTF16Ptr(drive))
+				if driveType == windows.DRIVE_FIXED || driveType == windows.DRIVE_REMOVABLE {
+					drives = append(drives, DriveInfo{
+						Letter:   drive,
+						Type:     getDriveTypeName(driveType),
+						IsSystem: isSystemDrive(drive),
+					})
+				}
+			}
+		}
+		return drives
+	}
+
+	// Parse buffer (null-separated drive strings)
+	driveStr := windows.UTF16PtrToString(&buffer[0])
+	for _, drive := range strings.Split(driveStr, "\x00") {
+		if drive == "" {
+			continue
+		}
+
+		// Check if drive is accessible
+		if _, err := os.Stat(drive + "\\"); err != nil {
+			continue
+		}
+
+		// Get drive type
+		driveType := windows.GetDriveType(windows.StringToUTF16Ptr(drive))
+		if driveType != windows.DRIVE_FIXED && driveType != windows.DRIVE_REMOVABLE {
+			continue
+		}
+
+		// Get free space
+		freeSpace, _ := GetDiskSpace(drive, false)
+
+		drives = append(drives, DriveInfo{
+			Letter:   drive,
+			Type:     getDriveTypeName(driveType),
+			IsSystem: isSystemDrive(drive),
+			FreeSize: freeSpace,
+		})
+	}
+
+	return drives
+}
+
+// DriveInfo represents information about a drive
+type DriveInfo struct {
+	Letter   string
+	Type     string
+	IsSystem bool
+	FreeSize uint64
+}
+
+// getDriveTypeName converts Windows drive type to readable string
+func getDriveTypeName(driveType uint32) string {
+	switch driveType {
+	case windows.DRIVE_FIXED:
+		return "Fixed Drive"
+	case windows.DRIVE_REMOVABLE:
+		return "Removable Drive"
+	case windows.DRIVE_CDROM:
+		return "CD-ROM"
+	case windows.DRIVE_RAMDISK:
+		return "RAM Disk"
+	default:
+		return "Unknown"
+	}
+}
+
 // ValidatePath validates and normalizes path
 func ValidatePath(path string) (string, error) {
 	if path == "" {
@@ -265,32 +358,83 @@ func GetSafeTempPaths() ([]string, error) {
 	return paths, nil
 }
 
-// Windows API functions for GetDiskFreeSpaceEx
-var (
-	kernel32                = syscall.NewLazyDLL("kernel32.dll")
-	procGetDiskFreeSpaceExW = kernel32.NewProc("GetDiskFreeSpaceExW")
-)
-
 // IsDiskFullError проверяет, является ли ошибка ошибкой "Недостаточно места на диске"
 func IsDiskFullError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	// Проверяем через golang.org/x/sys/windows
-	if errno, ok := err.(windows.Errno); ok {
-		return errno == ERROR_DISK_FULL
+	if errno, ok := err.(syscall.Errno); ok && errno == 112 {
+		return true
 	}
 
-	// Дополнительная проверка по тексту ошибки
-	errStr := err.Error()
-	return errStr == "write: no space left on device" ||
-		errStr == "There is not enough space on the disk" ||
-		errStr == "Недостаточно места на диске"
+	// Also check for Windows syscall errors
+	if pathErr, ok := err.(*os.PathError); ok {
+		if errno, ok := pathErr.Err.(syscall.Errno); ok && errno == 112 {
+			return true
+		}
+	}
+
+	return false
 }
 
+// IsAdmin checks if current process has administrator privileges
+func IsAdmin() bool {
+	var sid *windows.SID
+
+	// Create well-known SID for administrators group
+	err := windows.AllocateAndInitializeSid(
+		&windows.SECURITY_NT_AUTHORITY,
+		2,
+		windows.SECURITY_BUILTIN_DOMAIN_RID,
+		windows.DOMAIN_ALIAS_RID_ADMINS,
+		0, 0, 0, 0, 0, 0,
+		&sid,
+	)
+	if err != nil {
+		// Fallback: try opening physical drive
+		_, fallbackErr := os.Open("\\\\.\\PHYSICALDRIVE0")
+		if fallbackErr == nil {
+			return true
+		}
+		return false
+	}
+	defer windows.FreeSid(sid)
+
+	// Get current process token
+	token, err := windows.OpenCurrentProcessToken()
+	if err != nil {
+		// Fallback: try opening physical drive
+		_, fallbackErr := os.Open("\\\\.\\PHYSICALDRIVE0")
+		if fallbackErr == nil {
+			return true
+		}
+		return false
+	}
+	defer token.Close()
+
+	// Check if token is member of administrators group
+	member, err := token.IsMember(sid)
+	if err != nil {
+		// Fallback: try opening physical drive
+		_, fallbackErr := os.Open("\\\\.\\PHYSICALDRIVE0")
+		if fallbackErr == nil {
+			return true
+		}
+		return false
+	}
+
+	return member
+}
+
+// Windows API functions for GetDiskFreeSpaceEx
+var (
+	kernel32                = syscall.NewLazyDLL("kernel32.dll")
+	procGetDiskFreeSpaceExW = kernel32.NewProc("GetDiskFreeSpaceExW")
+)
+
 // GetDiskInfoForPath получает информацию о конкретном диске по пути
-func GetDiskInfoForPath(drivePath string) (*DiskInfo, error) {
+func GetDiskInfoForPath(drivePath string) (DiskInfo, error) {
 	drivePath = normalizePath(drivePath)
 
 	var freeBytesAvailable, totalBytes, freeBytes uint64
@@ -302,7 +446,7 @@ func GetDiskInfoForPath(drivePath string) (*DiskInfo, error) {
 		&freeBytes,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка получения информации о диске: %w", err)
+		return DiskInfo{}, fmt.Errorf("ошибка получения информации о диске: %w", err)
 	}
 
 	// Определение типа диска
@@ -311,13 +455,17 @@ func GetDiskInfoForPath(drivePath string) (*DiskInfo, error) {
 	// Проверка системного диска
 	isSystem := isSystemDisk(drivePath)
 
-	return &DiskInfo{
+	return DiskInfo{
 		Letter:     drivePath,
 		Type:       diskType,
 		TotalSize:  totalBytes,
 		FreeSize:   freeBytes,
+		UsedSize:   totalBytes - freeBytes,
 		IsSystem:   isSystem,
 		IsWritable: checkWriteAccess(drivePath),
+		Model:      "",
+		Serial:     "",
+		Interface:  "",
 	}, nil
 }
 

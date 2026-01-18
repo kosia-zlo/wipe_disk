@@ -31,6 +31,7 @@ type Config struct {
 		MaxSpeedMBps  float64 `yaml:"max_speed_mbps"`
 		MaxDuration   string  `yaml:"max_duration"`
 		FileDelayMs   int     `yaml:"file_delay_ms"`
+		TargetDrive   string  `yaml:"target_drive"`
 	} `yaml:"wipe"`
 
 	Logging struct {
@@ -41,6 +42,7 @@ type Config struct {
 		Structured  bool   `yaml:"structured"`
 		SIEMEnabled bool   `yaml:"siem_enabled"`
 		SIEMServer  string `yaml:"siem_server"`
+		LogPath     string `yaml:"log_path"`
 	} `yaml:"logging"`
 
 	Reporting struct {
@@ -93,6 +95,7 @@ func Default() *Config {
 			MaxSpeedMBps  float64 `yaml:"max_speed_mbps"`
 			MaxDuration   string  `yaml:"max_duration"`
 			FileDelayMs   int     `yaml:"file_delay_ms"`
+			TargetDrive   string  `yaml:"target_drive"`
 		}{
 			Enabled:       true,
 			SSDMethod:     "cipher",
@@ -105,6 +108,7 @@ func Default() *Config {
 			MaxSpeedMBps:  100, // 100MB/s по умолчанию
 			MaxDuration:   "2h",
 			FileDelayMs:   100,
+			TargetDrive:   "",
 		},
 		Logging: struct {
 			Level       string `yaml:"level"`
@@ -114,6 +118,7 @@ func Default() *Config {
 			Structured  bool   `yaml:"structured"`
 			SIEMEnabled bool   `yaml:"siem_enabled"`
 			SIEMServer  string `yaml:"siem_server"`
+			LogPath     string `yaml:"log_path"`
 		}{
 			Level:       "INFO",
 			File:        "",
@@ -122,6 +127,7 @@ func Default() *Config {
 			Structured:  true,
 			SIEMEnabled: false,
 			SIEMServer:  "",
+			LogPath:     "./logs",
 		},
 		Reporting: struct {
 			Enabled     bool   `yaml:"enabled"`

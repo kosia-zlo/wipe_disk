@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/windows"
 
+	"wipedisk_enterprise/internal/app"
 	"wipedisk_enterprise/internal/cli"
 	"wipedisk_enterprise/internal/config"
 	"wipedisk_enterprise/internal/logging"
@@ -22,8 +27,9 @@ import (
 )
 
 const (
-	Version = "1.2.2"
-	AppName = "WipeDisk Enterprise"
+	Version   = "1.3.0-stable"
+	AppName   = "WipeDisk Enterprise"
+	BuildDate = "2026-01-18"
 
 	// Exit codes
 	EXIT_SUCCESS = 0
@@ -44,6 +50,7 @@ var (
 	mode            string
 	allowSystemDisk bool
 	startTime       time.Time
+	elevated        bool // Hidden flag to prevent UAC recursion
 )
 
 // CLI команды
@@ -90,6 +97,18 @@ var diagnoseCmd = &cobra.Command{
 	RunE:  runDiagnose,
 }
 
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Показать версию и информацию о лицензии",
+	RunE:  runVersion,
+}
+
+var reportsCmd = &cobra.Command{
+	Use:   "reports",
+	Short: "Управление отчетами",
+	RunE:  runReports,
+}
+
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&dryRun, "dry-run", "n", false, "Тестовый режим")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Подробный вывод")
@@ -99,6 +118,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&engine, "engine", "internal", "Движок затирания (internal/sdelete-compatible/cipher)")
 	rootCmd.PersistentFlags().StringVar(&mode, "mode", "standard", "Режим затирания (standard/sdelete/cipher)")
 	rootCmd.PersistentFlags().BoolVar(&allowSystemDisk, "allow-system-disk", false, "Разрешить затирание системного диска (ОПАСНО)")
+
+	// Hidden flag to prevent UAC recursion
+	rootCmd.PersistentFlags().BoolVar(&elevated, "elevated", false, "Internal flag to prevent UAC recursion")
+	rootCmd.PersistentFlags().MarkHidden("elevated")
 
 	wipeCmd.Flags().StringP("method", "m", "", "Метод затирания")
 	wipeCmd.Flags().IntP("passes", "p", 0, "Количество проходов")
@@ -121,6 +144,12 @@ func init() {
 	diagnoseCmd.Flags().String("test", "", "Конкретный тест (permissions/disks/memory/cpu/paths/api/wipe/network)")
 	diagnoseCmd.Flags().String("output", "", "Сохранить отчёт в файл")
 
+	reportsCmd.Flags().Bool("list", false, "Показать список отчетов")
+	reportsCmd.Flags().String("type", "", "Фильтр по типу (diagnostic/wipe/maintenance)")
+	reportsCmd.Flags().Int("limit", 10, "Лимит отчетов для показа")
+	reportsCmd.Flags().Bool("cleanup", false, "Очистить старые отчеты")
+	reportsCmd.Flags().Int("keep-days", 30, "Сохранять отчеты за последние N дней")
+
 	// Cleanup command
 	cleanupCmd := &cobra.Command{
 		Use:   "cleanup [operations...]",
@@ -132,7 +161,7 @@ func init() {
 	cleanupCmd.Flags().String("category", "", "Выполнить операции по категории")
 	cleanupCmd.Flags().Bool("dry-run", false, "Тестовый режим выполнения")
 
-	rootCmd.AddCommand(wipeCmd, cleanCmd, infoCmd, verifyCmd, maintenanceCmd, diagnoseCmd, cleanupCmd)
+	rootCmd.AddCommand(wipeCmd, cleanCmd, infoCmd, verifyCmd, maintenanceCmd, diagnoseCmd, reportsCmd, cleanupCmd, versionCmd)
 }
 
 func runWipe(cmd *cobra.Command, args []string) error {
@@ -775,44 +804,20 @@ func runDiagnose(cmd *cobra.Command, args []string) error {
 	}
 
 	// Выводим результаты
-	fmt.Println("\nРезультаты диагностики:")
-	fmt.Println("=====================")
-	fmt.Printf("Уровень: %s\n", diagnostics.Level)
-	fmt.Printf("Общий статус: %s\n", diagnostics.Overall)
-	fmt.Printf("Длительность: %s\n", diagnostics.Duration)
-	fmt.Printf("Всего тестов: %d\n", diagnostics.Summary.TotalTests)
-	fmt.Printf("Пройдено: %d\n", diagnostics.Summary.Passed)
-	fmt.Printf("Предупреждений: %d\n", diagnostics.Summary.Warnings)
-	fmt.Printf("Ошибок: %d\n", diagnostics.Summary.Failed)
+	for _, result := range diagnostics.Results {
+		status := "✓"
+		if result.Status == "FAILED" {
+			status = "✗"
+		} else if result.Status == "WARNING" {
+			status = "⚠"
+		} else if result.Status == "SKIPPED" {
+			status = "-"
+		}
 
-	// Информация об окружении
-	fmt.Println("\nИнформация об окружении:")
-	fmt.Println("------------------------")
-	fmt.Printf("ОС: %s\n", diagnostics.Environment.OSVersion)
-	fmt.Printf("Архитектура: %s\n", diagnostics.Environment.Architecture)
-	fmt.Printf("Пользователь: %s\\%s\n", diagnostics.Environment.Domain, diagnostics.Environment.Username)
-	fmt.Printf("Компьютер: %s\n", diagnostics.Environment.MachineName)
-	fmt.Printf("Права админа: %t\n", diagnostics.Environment.IsAdmin)
-	fmt.Printf("Серверная ОС: %t\n", diagnostics.Environment.IsServer)
-	fmt.Printf("CPU ядер: %d\n", diagnostics.Environment.CPUCount)
+		fmt.Printf("%s %s - %s (%v)\n", status, result.Test, result.Message, result.Duration)
 
-	// Детальные результаты
-	if len(diagnostics.Results) > 0 {
-		fmt.Println("\nДетальные результаты:")
-		fmt.Println("--------------------")
-		for _, result := range diagnostics.Results {
-			status := "✓"
-			if result.Status == "FAIL" {
-				status = "✗"
-			} else if result.Status == "WARN" {
-				status = "⚠"
-			}
-
-			fmt.Printf("%s %s - %s (%v)\n", status, result.Test, result.Message, result.Duration)
-
-			if verbose && result.Details != nil {
-				fmt.Printf("   Детали: %+v\n", result.Details)
-			}
+		if verbose && result.Details != nil {
+			fmt.Printf("   Детали: %+v\n", result.Details)
 		}
 	}
 
@@ -829,6 +834,149 @@ func runDiagnose(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("обнаружены критические проблемы")
 	} else if diagnostics.Overall == "WARNING" {
 		fmt.Println("\n⚠ Обнаружены предупреждения. Рекомендуется проверить систему.")
+	}
+
+	return nil
+}
+
+func runVersion(cmd *cobra.Command, args []string) error {
+	fmt.Printf("WipeDisk Enterprise v%s\n", Version)
+	fmt.Printf("Build: %s\n", BuildDate)
+	fmt.Printf("Go: %s\n", runtime.Version())
+	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Println()
+	fmt.Println("Enterprise Data Destruction Utility")
+	fmt.Println("Licensed for enterprise use only")
+	fmt.Println()
+	return nil
+}
+
+func runReports(cmd *cobra.Command, args []string) error {
+	// Get flags
+	reportType, _ := cmd.Flags().GetString("type")
+	limit, _ := cmd.Flags().GetInt("limit")
+	cleanup, _ := cmd.Flags().GetBool("cleanup")
+	keepDays, _ := cmd.Flags().GetInt("keep-days")
+
+	// Default config
+	defaultCfg := config.Default()
+	logger, err := logging.NewEnterpriseLogger(defaultCfg, false)
+	if err != nil {
+		return fmt.Errorf("ошибка инициализации логгера: %w", err)
+	}
+	defer logger.Close()
+
+	reportsDir := defaultCfg.Reporting.LocalPath
+
+	// Cleanup old reports
+	if cleanup {
+		cutoff := time.Now().AddDate(0, 0, -keepDays)
+
+		entries, err := os.ReadDir(reportsDir)
+		if err != nil {
+			return fmt.Errorf("ошибка чтения директории отчетов: %w", err)
+		}
+
+		deleted := 0
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+
+			if info.ModTime().Before(cutoff) {
+				if err := os.Remove(filepath.Join(reportsDir, entry.Name())); err != nil {
+					logger.Log("WARN", "Ошибка удаления отчета", "file", entry.Name(), "error", err)
+				} else {
+					deleted++
+					logger.Log("INFO", "Удален старый отчет", "file", entry.Name())
+				}
+			}
+		}
+
+		fmt.Printf("Удалено %d старых отчетов\n", deleted)
+		return nil
+	}
+
+	// List reports
+	entries, err := os.ReadDir(reportsDir)
+	if err != nil {
+		return fmt.Errorf("ошибка чтения директории отчетов: %w", err)
+	}
+
+	var reports []struct {
+		Name    string
+		Size    int64
+		ModTime time.Time
+		Type    string
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Determine report type
+		rType := "unknown"
+		if strings.Contains(entry.Name(), "diagnostic") {
+			rType = "diagnostic"
+		} else if strings.Contains(entry.Name(), "wipe") {
+			rType = "wipe"
+		} else if strings.Contains(entry.Name(), "maintenance") {
+			rType = "maintenance"
+		}
+
+		// Filter by type if specified
+		if reportType != "" && rType != reportType {
+			continue
+		}
+
+		reports = append(reports, struct {
+			Name    string
+			Size    int64
+			ModTime time.Time
+			Type    string
+		}{
+			Name:    entry.Name(),
+			Size:    info.Size(),
+			ModTime: info.ModTime(),
+			Type:    rType,
+		})
+	}
+
+	// Sort by modification time (newest first)
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].ModTime.After(reports[j].ModTime)
+	})
+
+	// Apply limit
+	if limit > 0 && len(reports) > limit {
+		reports = reports[:limit]
+	}
+
+	if len(reports) == 0 {
+		fmt.Println("Отчеты не найдены")
+		return nil
+	}
+
+	fmt.Printf("Найдено отчетов: %d\n", len(reports))
+	fmt.Println("========================")
+
+	for i, report := range reports {
+		fmt.Printf("%d. %s\n", i+1, report.Name)
+		fmt.Printf("   Тип: %s\n", report.Type)
+		fmt.Printf("   Размер: %.1f KB\n", float64(report.Size)/1024)
+		fmt.Printf("   Изменен: %s\n", report.ModTime.Format("2006-01-02 15:04:05"))
+		fmt.Println()
 	}
 
 	return nil
@@ -860,26 +1008,130 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	return cleanupCmd.ExecuteCleanup(args, dryRun)
 }
 
-func main() {
-	// Проверяем интерактивный режим (без аргументов)
-	if len(os.Args) == 1 {
-		initInteractiveMode()
-		return
+// checkAndElevateAdmin проверяет права администратора и при необходимости перезапускает программу
+func checkAndElevateAdmin() bool {
+	if runtime.GOOS != "windows" {
+		return true // На других ОС проверяем через system.IsAdmin()
 	}
 
-	// Режим с флагами - используем Cobra
-	if err := rootCmd.Execute(); err != nil {
-		// Корректные exit codes
-		if strings.Contains(err.Error(), "требуются права администратора") ||
-			strings.Contains(err.Error(), "запуск на серверных ОС запрещен") ||
-			strings.Contains(err.Error(), "ошибка загрузки конфигурации") ||
-			strings.Contains(err.Error(), "ошибка создания директорий") {
-			os.Exit(EXIT_ERROR)
-		} else if strings.Contains(err.Error(), "некоторые операции завершились с ошибкой") {
-			os.Exit(EXIT_WARNING)
-		} else {
-			os.Exit(EXIT_SUCCESS)
+	// Если уже запущены с правами администратора (флаг --elevated), не перезапускаемся
+	if elevated {
+		if !system.IsAdmin() {
+			fmt.Println("ОШИБКА: Права администратора не получены даже после запроса UAC")
+			return false
 		}
+		return true
 	}
-	os.Exit(EXIT_SUCCESS)
+
+	// Проверяем права администратора
+	if system.IsAdmin() {
+		return true // Уже есть права администратора
+	}
+
+	// Прав нет - пытаемся перезапустить с повышением
+	fmt.Println("ВНИМАНИЕ: Для работы WipeDisk требуются права Администратора!")
+	fmt.Println("Попытка перезапуска с повышением прав...")
+
+	exePath, err := os.Executable()
+	if err != nil {
+		exePath = os.Args[0]
+	}
+
+	verb := "runas"
+	cwd, _ := os.Getwd()
+
+	// Добавляем флаг --elevated к аргументам
+	elevatedArgs := append(os.Args[1:], "--elevated")
+
+	// Используем ShellExecute для запроса UAC
+	err = windows.ShellExecute(0,
+		windows.StringToUTF16Ptr(verb),
+		windows.StringToUTF16Ptr(exePath),
+		windows.StringToUTF16Ptr(strings.Join(elevatedArgs, " ")),
+		windows.StringToUTF16Ptr(cwd),
+		windows.SW_NORMAL)
+	if err != nil {
+		fmt.Printf("Не удалось перезапустить с правами администратора: %v\n", err)
+		fmt.Println("Пожалуйста, запустите программу вручную от имени администратора")
+		return false
+	}
+
+	fmt.Println("Программа перезапускается с правами администратора...")
+	return false // Выходим из текущего процесса
+}
+
+func main() {
+	// Сначала проверяем права администратора
+	if !checkAndElevateAdmin() {
+		antiCloseGuard()
+		os.Exit(EXIT_ERROR)
+	}
+
+	// Дуальный режим: CLI если есть аргументы, интерактивное меню если нет
+	if len(os.Args) > 1 {
+		// Режим с флагами - используем Cobra
+		if err := rootCmd.Execute(); err != nil {
+			// Корректные exit codes
+			if strings.Contains(err.Error(), "требуются права администратора") ||
+				strings.Contains(err.Error(), "запуск на серверных ОС запрещен") ||
+				strings.Contains(err.Error(), "ошибка загрузки конфигурации") ||
+				strings.Contains(err.Error(), "ошибка создания директорий") {
+				antiCloseGuard()
+				os.Exit(EXIT_ERROR)
+			} else if strings.Contains(err.Error(), "некоторые операции завершились с ошибками") {
+				antiCloseGuard()
+				os.Exit(EXIT_WARNING)
+			} else {
+				antiCloseGuard()
+				os.Exit(EXIT_SUCCESS)
+			}
+		}
+		antiCloseGuard()
+		os.Exit(EXIT_SUCCESS)
+	} else {
+		// Интерактивный режим (без аргументов)
+		if err := initInteractiveMode(); err != nil {
+			fmt.Printf("Ошибка интерактивного меню: %v\n", err)
+			antiCloseGuard()
+			os.Exit(EXIT_ERROR)
+		}
+		// Успешное завершение - без паузы
+		os.Exit(EXIT_SUCCESS)
+	}
+}
+
+// initInteractiveMode initializes and runs the interactive menu
+func initInteractiveMode() error {
+	// Load configuration
+	configPath := "config.yaml"
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		cfg = config.Default()
+	}
+
+	// Create logger
+	logger, err := logging.NewEnterpriseLogger(cfg, false)
+	if err != nil {
+		return fmt.Errorf("ошибка инициализации логгера: %w", err)
+	}
+	defer logger.Close()
+
+	// Create app with dependencies
+	coreApp := app.NewAppWithDependencies(logger, wipe.NewWipeEngine(logger), maintenance.NewMaintenanceRunner(logger))
+
+	// Create and run interactive menu
+	interactiveMenu := app.NewInteractiveMenu(coreApp)
+	if err := interactiveMenu.Run(); err != nil {
+		return fmt.Errorf("ошибка интерактивного меню: %w", err)
+	}
+
+	return nil
+}
+
+// antiCloseGuard предотвращает мгновенное закрытие консоли
+func antiCloseGuard() {
+	fmt.Println()
+	fmt.Println("Нажмите Enter для выхода...")
+	var input string
+	fmt.Scanln(&input)
 }

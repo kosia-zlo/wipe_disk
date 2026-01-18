@@ -1,0 +1,47 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
+/build/
+/dist/
+/release/
+
+# Logs
+/logs/
+*.log
+
+# Reports
+/reports/
+*.json
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Go specific
+vendor/
+*.test
+*.prof
+
+# Config files (keep templates)
+config.yaml
+!config.yaml.template
