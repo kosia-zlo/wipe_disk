@@ -67,11 +67,13 @@ func (im *InteractiveMenu) showMainMenu() error {
 	fmt.Println("║  6. 📊 Generate reports             (Отчеты)                   ║")
 	fmt.Println("║  7. 🔇 Silent mode (GPO)            (Справка GPO)              ║")
 	fmt.Println("║  8. 🧪 Dry-run (Test mode)          (Тестовый запуск)          ║")
+	fmt.Println("║  0. 💾 Show all local drives       (Все диски)                ║")
+	fmt.Println("║  W. 🗑️  Wipe ALL drives              (Все диски сразу)         ║")
 	fmt.Println("║  9. 🚪 Exit                         (Выход)                    ║")
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 	im.showSystemInfo()
 
-	choice := im.prompt("Выберите опцию (1-9): ")
+	choice := im.prompt("Выберите опцию (0-9, W): ")
 	switch choice {
 	case "1":
 		return im.showSecureWipeMenu()
@@ -89,6 +91,12 @@ func (im *InteractiveMenu) showMainMenu() error {
 		return im.showGPOInfo()
 	case "8":
 		return im.showDryRunMenu()
+	case "0":
+		return im.showAllLocalDrives()
+	case "W":
+		return im.wipeAllDrives()
+	case "w":
+		return im.wipeAllDrives()
 	case "9":
 		im.cancel()
 		return context.Canceled
@@ -153,45 +161,143 @@ func (im *InteractiveMenu) executeWipe(drive, method string, passes int) error {
 	return nil
 }
 
-// Заглушки для остальных 6 пунктов (чтобы билд прошел)
 func (im *InteractiveMenu) showSystemMaintenanceMenu() error {
 	fmt.Println("Очистка системы...")
 	im.pause()
 	return nil
 }
+
 func (im *InteractiveMenu) showVerifyWipeMenu() error {
 	fmt.Println("Верификация...")
 	im.pause()
 	return nil
 }
+
 func (im *InteractiveMenu) showDiagnosticsMenu() error {
 	fmt.Println("Диагностика...")
 	im.pause()
 	return nil
 }
+
 func (im *InteractiveMenu) showConfigureProfilesMenu() error {
 	fmt.Println("Настройка...")
 	im.pause()
 	return nil
 }
+
 func (im *InteractiveMenu) showGenerateReportsMenu() error {
 	fmt.Println("Отчеты...")
 	im.pause()
 	return nil
 }
+
 func (im *InteractiveMenu) showGPOInfo() error {
 	fmt.Println("GPO справка...")
 	im.pause()
 	return nil
 }
-func (im *InteractiveMenu) showDryRunMenu() error { fmt.Println("Dry-run..."); im.pause(); return nil }
+
+func (im *InteractiveMenu) showDryRunMenu() error {
+	fmt.Println("Dry-run...")
+	im.pause()
+	return nil
+}
+
+func (im *InteractiveMenu) showAllLocalDrives() error {
+	im.clearScreen()
+	fmt.Println("╔════════════════════════════════════════════════════════════════╗")
+	fmt.Println("║                    ВСЕ ЛОКАЛЬНЫЕ ДИСКИ                         ║")
+	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
+
+	drives := system.GetAvailableDrives()
+	if len(drives) == 0 {
+		fmt.Println("║ Диски не найдены                                                 ║")
+	} else {
+		for i, d := range drives {
+			totalGB := float64(d.FreeSize) / 1e9
+			status := "Доступен"
+			if d.IsSystem {
+				status = "СИСТЕМНЫЙ"
+			}
+			fmt.Printf("║ %d. %s [%s] - %.1f GB свободно - %s                     ║\n",
+				i+1, d.Letter, d.Type, totalGB, status)
+		}
+	}
+
+	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
+	fmt.Printf("║ Всего дисков: %d                                              ║\n", len(drives))
+	fmt.Println("╚════════════════════════════════════════════════════════════════╝")
+
+	im.pause()
+	return nil
+}
+
+func (im *InteractiveMenu) wipeAllDrives() error {
+	im.clearScreen()
+	fmt.Println("╔════════════════════════════════════════════════════════════════╗")
+	fmt.Println("║               ⚠️  ЗАТИРАНИЕ ВСЕХ ДИСКОВ ⚠️                     ║")
+	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
+
+	drives := system.GetAvailableDrives()
+	if len(drives) == 0 {
+		fmt.Println("║ Диски не найдены                                                 ║")
+		im.pause()
+		return nil
+	}
+
+	fmt.Println("║ Найденные диски:                                               ║")
+	for i, d := range drives {
+		totalGB := float64(d.FreeSize) / 1e9
+		status := "Доступен"
+		if d.IsSystem {
+			status = "СИСТЕМНЫЙ"
+		}
+		fmt.Printf("║ %d. %s [%s] - %.1f GB свободно - %s                     ║\n",
+			i+1, d.Letter, d.Type, totalGB, status)
+	}
+
+	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
+	fmt.Printf("║ ВСЕГО ДИСКОВ ДЛЯ ЗАТИРАНИЯ: %d                                 ║\n", len(drives))
+	fmt.Println("║                                                               ║")
+	fmt.Println("║ ⚠️  ВНИМАНИЕ: Это затрет свободное место на ВСЕХ дисках!      ║")
+	fmt.Println("║    Системный диск будет затерт тоже!                            ║")
+	fmt.Println("║                                                               ║")
+	fmt.Println("║ Для подтверждения введите: WIPE_ALL_DRIVES                     ║")
+	fmt.Println("╚════════════════════════════════════════════════════════════════╝")
+
+	confirmation := im.prompt("Подтверждение: ")
+	if confirmation != "WIPE_ALL_DRIVES" {
+		return fmt.Errorf("операция отменена - неверное подтверждение")
+	}
+
+	fmt.Println("\n🔥 НАЧИНАЮ ЗАТИРАНИЕ ВСЕХ ДИСКОВ...\n")
+
+	// Затираем каждый диск последовательно
+	for i, d := range drives {
+		drive := strings.TrimRight(d.Letter, ".\\") + "\\"
+		fmt.Printf("\n[ДИСК %d/%d] Затираю: %s\n", i+1, len(drives), drive)
+
+		err := im.app.StartWipe(drive)
+		if err != nil {
+			fmt.Printf("❌ Ошибка при затирании диска %s: %v\n", drive, err)
+			continue
+		}
+		fmt.Printf("✅ Диск %s затерт успешно\n", drive)
+	}
+
+	fmt.Println("\n🎉 ВСЕ ДИСКИ ЗАТЕРТЫ УСПЕШНО!")
+	im.pause()
+	return nil
+}
 
 func (im *InteractiveMenu) clearScreen() { fmt.Print("\033[H\033[2J") }
+
 func (im *InteractiveMenu) prompt(t string) string {
 	fmt.Print(t)
 	input, _ := im.reader.ReadString('\n')
 	return strings.TrimSpace(input)
 }
+
 func (im *InteractiveMenu) pause() {
 	fmt.Print("\nНажмите Enter...")
 	im.reader.ReadString('\n')

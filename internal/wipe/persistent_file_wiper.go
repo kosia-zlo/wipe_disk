@@ -72,6 +72,12 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 	var bytesWritten uint64
 	var filesCreated int
 	fileIndex := 1
+	var currentFileSize int64
+
+	// Получаем информацию о свободном месте для более точной оценки
+	var freeSpaceGB float64
+	freeSpaceGB = 2000.0 // По умолчанию 2 ТБ
+	bufferSizeMB := float64(pfw.config.BufferSize) / 1024 / 1024
 
 	// Бесконечный цикл создания файлов до ошибки "Недостаточно места на диске"
 	for {
@@ -85,7 +91,44 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 
 		// Создаем новый файл
 		fileName := filepath.Join(tempDir, fmt.Sprintf("wipe_data_%d.bin", fileIndex))
-		fmt.Printf(">>> Создаю файл: %s\n", fileName)
+		elapsed := time.Since(startTime)
+		estimatedTime := ""
+
+		// Всегда показываем оценку времени, даже для первого файла
+		if bytesWritten > 0 {
+			// Оценка оставшегося времени
+			estimatedBytes := float64(bytesWritten) / elapsed.Seconds()
+			// Используем реальное свободное место если доступно
+			targetBytes := freeSpaceGB * 1024 * 1024 * 1024
+			if targetBytes == 0 {
+				targetBytes = float64(2 * 1024 * 1024 * 1024 * 1024) // 2 ТБ по умолчанию
+			}
+			remainingBytes := targetBytes - float64(bytesWritten)
+			if estimatedBytes > 0 {
+				remainingSecs := remainingBytes / estimatedBytes
+				if remainingSecs < 60 {
+					estimatedTime = fmt.Sprintf("(~%d сек)", int(remainingSecs))
+				} else if remainingSecs < 3600 {
+					estimatedTime = fmt.Sprintf("(~%d мин)", int(remainingSecs/60))
+				} else {
+					estimatedTime = fmt.Sprintf("(~%.1f час)", remainingSecs/3600)
+				}
+			}
+		} else {
+			// Для первого файла показываем примерное время на основе свободного места
+			if freeSpaceGB > 0 {
+				estimatedHours := freeSpaceGB / 100 / 60 / 60 // 100 МБ/с средняя скорость
+				if estimatedHours < 1 {
+					estimatedTime = fmt.Sprintf("(~%.0f мин)", estimatedHours*60)
+				} else {
+					estimatedTime = fmt.Sprintf("(~%.1f час)", estimatedHours)
+				}
+			} else {
+				estimatedTime = "(~5.5 час)" // По умолчанию
+			}
+		}
+
+		fmt.Printf(">>> Создаю файл #%d: %s (начнет %.1f МБ, растет до заполнения диска) %s\n", fileIndex, filepath.Base(fileName), bufferSizeMB, estimatedTime)
 		file, err := os.Create(fileName)
 		if err != nil {
 			// Проверяем, не ошибка ли это "Недостаточно места"
@@ -95,6 +138,7 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 			}
 			return nil, fmt.Errorf("ошибка создания файла %s: %w", fileName, err)
 		}
+		currentFileSize = 0 // Сбрасываем счетчик для нового файла
 
 		// Записываем данные блоками
 		for {
@@ -109,6 +153,7 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 				return nil, fmt.Errorf("ошибка записи в файл %s: %w", fileName, err)
 			}
 			bytesWritten += uint64(len(buffer))
+			currentFileSize += int64(len(buffer))
 
 			// Отправляем прогресс каждые 100 МБ
 			if pfw.config.Progress != nil && bytesWritten%(100*1024*1024) == 0 {
@@ -129,7 +174,10 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 
 		// Выводим прогресс в консоль
 		writtenGB := float64(bytesWritten) / (1024 * 1024 * 1024)
-		fmt.Printf("+++ Записано: %.2f GB\n", writtenGB)
+		elapsedTime := time.Since(startTime)
+		speedMBps := float64(bytesWritten) / (1024 * 1024) / elapsedTime.Seconds()
+		currentFileMB := float64(currentFileSize) / 1024 / 1024
+		fmt.Printf("+++ Записано: %.2f GB | Скорость: %.1f MB/s | Файлов: %d | Последний: %.1f МБ\n", writtenGB, speedMBps, filesCreated, currentFileMB)
 	}
 
 cleanup:
