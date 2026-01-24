@@ -3,6 +3,7 @@ package wipe
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -132,21 +133,21 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 		file, err := os.Create(fileName)
 		if err != nil {
 			// Проверяем, не ошибка ли это "Недостаточно места"
-			if strings.Contains(err.Error(), "no space left") || strings.Contains(err.Error(), "disk full") {
+			if isDiskFullError(err) {
 				// Диск заполнен - завершаем затирание
 				break
 			}
 			return nil, fmt.Errorf("ошибка создания файла %s: %w", fileName, err)
 		}
+		defer file.Close()  // Гарантированное закрытие дескриптора
 		currentFileSize = 0 // Сбрасываем счетчик для нового файла
 
 		// Записываем данные блоками
 		for {
 			_, err := file.Write(buffer)
 			if err != nil {
-				file.Close()
 				// Проверяем, не ошибка ли это "Недостаточно места"
-				if strings.Contains(err.Error(), "no space left") || strings.Contains(err.Error(), "disk full") {
+				if isDiskFullError(err) {
 					// Диск заполнен - завершаем затирание
 					goto cleanup
 				}
@@ -168,7 +169,6 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 			}
 		}
 
-		file.Close()
 		filesCreated++
 		fileIndex++
 
@@ -196,4 +196,38 @@ cleanup:
 		"bytes_written", bytesWritten, "duration", result.Duration, "speed_mbps", result.SpeedMBps)
 
 	return result, nil
+}
+
+// isDiskFullError проверяет, является ли ошибка ошибкой заполнения диска
+func isDiskFullError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+
+	// Проверка на стандартные ошибки заполнения диска
+	if strings.Contains(errStr, "no space left") ||
+		strings.Contains(errStr, "disk full") ||
+		strings.Contains(errStr, "insufficient space") ||
+		strings.Contains(errStr, "not enough space") ||
+		strings.Contains(errStr, "volume full") ||
+		strings.Contains(errStr, "disk is full") {
+		return true
+	}
+
+	// Проверка на специфичные ошибки Windows
+	if strings.Contains(errStr, "ERROR_DISK_FULL") ||
+		strings.Contains(errStr, "ERROR_HANDLE_DISK_FULL") ||
+		strings.Contains(errStr, "ERROR_NOT_ENOUGH_QUOTA") {
+		return true
+	}
+
+	// Проверка на системные ошибки
+	// os.ErrNoSpace не существует в Go, используем проверку через строки
+	if errors.Is(err, os.ErrPermission) {
+		return true
+	}
+
+	return false
 }

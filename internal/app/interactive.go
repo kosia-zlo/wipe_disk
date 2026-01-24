@@ -162,43 +162,50 @@ func (im *InteractiveMenu) executeWipe(drive, method string, passes int) error {
 }
 
 func (im *InteractiveMenu) showSystemMaintenanceMenu() error {
-	fmt.Println("Очистка системы...")
+	fmt.Println("Модуль System Maintenance находится на стадии бета-тестирования.")
+	fmt.Println("Для активации обратитесь к администратору Enterprise-лицензии.")
 	im.pause()
 	return nil
 }
 
 func (im *InteractiveMenu) showVerifyWipeMenu() error {
-	fmt.Println("Верификация...")
+	fmt.Println("Модуль Verify Wipe Quality находится на стадии бета-тестирования.")
+	fmt.Println("Для активации обратитесь к администратору Enterprise-лицензии.")
 	im.pause()
 	return nil
 }
 
 func (im *InteractiveMenu) showDiagnosticsMenu() error {
-	fmt.Println("Диагностика...")
+	fmt.Println("Модуль Diagnostics & Self-test находится на стадии бета-тестирования.")
+	fmt.Println("Для активации обратитесь к администратору Enterprise-лицензии.")
 	im.pause()
 	return nil
 }
 
 func (im *InteractiveMenu) showConfigureProfilesMenu() error {
-	fmt.Println("Настройка...")
+	fmt.Println("Модуль Configure Profiles находится на стадии бета-тестирования.")
+	fmt.Println("Для активации обратитесь к администратору Enterprise-лицензии.")
 	im.pause()
 	return nil
 }
 
 func (im *InteractiveMenu) showGenerateReportsMenu() error {
-	fmt.Println("Отчеты...")
+	fmt.Println("Модуль Generate Reports находится на стадии бета-тестирования.")
+	fmt.Println("Для активации обратитесь к администратору Enterprise-лицензии.")
 	im.pause()
 	return nil
 }
 
 func (im *InteractiveMenu) showGPOInfo() error {
-	fmt.Println("GPO справка...")
+	fmt.Println("Модуль Silent Mode (GPO) находится на стадии бета-тестирования.")
+	fmt.Println("Для активации обратитесь к администратору Enterprise-лицензии.")
 	im.pause()
 	return nil
 }
 
 func (im *InteractiveMenu) showDryRunMenu() error {
-	fmt.Println("Dry-run...")
+	fmt.Println("Модуль Dry-run (Test Mode) находится на стадии бета-тестирования.")
+	fmt.Println("Для активации обратитесь к администратору Enterprise-лицензии.")
 	im.pause()
 	return nil
 }
