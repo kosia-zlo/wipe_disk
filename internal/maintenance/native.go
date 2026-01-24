@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"wipedisk_enterprise/internal/logging"
+	"wipedisk_enterprise/internal/system"
 )
 
 // NativeMaintenance реализует нативные функции обслуживания системы
@@ -45,7 +46,7 @@ func (nm *NativeMaintenance) CleanTemp() error {
 	tempPaths := []string{
 		os.Getenv("TEMP"),
 		os.Getenv("TMP"),
-		`C:\Windows\Temp`,
+		filepath.Join(system.GetSystemDrive(), "Windows", "Temp"),
 	}
 
 	var totalErrors []string
@@ -83,7 +84,7 @@ func (nm *NativeMaintenance) ClearPrintSpooler() error {
 	}
 
 	// Очищаем папку очереди печати
-	printerPath := `C:\Windows\System32\spool\PRINTERS`
+	printerPath := filepath.Join(system.GetSystemDrive(), "Windows", "System32", "spool", "PRINTERS")
 	deleted, errors := nm.cleanDirectory(printerPath)
 
 	if len(errors) > 0 {
@@ -107,7 +108,7 @@ func (nm *NativeMaintenance) EmptyRecycleBin() error {
 	// Используем Windows API через PowerShell
 	psScript := `
 		Add-Type -AssemblyName Microsoft.VisualBasic
-		[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('C:\$Recycle.Bin\*','OnlyErrorDialogs','SendToRecycleBin')
+		[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('" + filepath.Join(system.GetSystemDrive(), "$Recycle.Bin", "*") + "','OnlyErrorDialogs','SendToRecycleBin')
 	`
 
 	cmd := exec.Command("powershell", "-Command", psScript)

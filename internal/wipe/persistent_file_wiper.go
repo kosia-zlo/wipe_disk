@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"wipedisk_enterprise/internal/logging"
-	"wipedisk_enterprise/internal/system"
 )
 
 // PersistentFileConfig конфигурация для затирания через постоянный файл
@@ -43,36 +43,20 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 
 	// Нормализация пути диска
 	drivePath = filepath.Clean(drivePath)
-	if len(drivePath) != 2 || drivePath[1] != ':' {
-		return nil, fmt.Errorf("некорректный путь к диску: %s", drivePath)
-	}
 
-	// Проверка доступности диска
-	diskInfo, err := system.GetDiskInfoForPath(drivePath)
+	// Создаем временную скрытую директорию в корне диска
+	tempDir := filepath.Join(drivePath, ".wipedisk_tmp")
+	var err error
+	err = os.MkdirAll(tempDir, 0700)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка получения информации о диске: %w", err)
-	}
-
-	if diskInfo.FreeSize == 0 {
-		return nil, fmt.Errorf("на диске нет свободного места")
-	}
-
-	pfw.config.Logger.Log("INFO", "Начало затирания", "disk", drivePath, "free_space", diskInfo.FreeSize)
-
-	// Создаем временный файл в корне диска
-	tempFile := filepath.Join(drivePath, "wipedisk_reserve.tmp")
-
-	// Используем os.OpenFile с эксклюзивными флагами
-	file, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
-	if err != nil {
-		return nil, fmt.Errorf("ошибка создания временного файла: %w", err)
+		return nil, fmt.Errorf("ошибка создания временной директории: %w", err)
 	}
 	defer func() {
-		file.Close()
-		os.Remove(tempFile)
+		// Удаляем временную директорию после завершения
+		os.RemoveAll(tempDir)
 	}()
 
-	// Подготовка буфера для записи
+	// Подготовка буфера для записи (1 МБ)
 	buffer := make([]byte, pfw.config.BufferSize)
 
 	// Если паттерн не указан, генерируем случайные данные
@@ -87,91 +71,68 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 
 	var bytesWritten uint64
 	var filesCreated int
+	fileIndex := 1
 
-	// Бесконечный цикл записи до ошибки "Недостаточно места на диске"
+	// Бесконечный цикл создания файлов до ошибки "Недостаточно места на диске"
 	for {
+		// Проверка контекста
 		select {
 		case <-ctx.Done():
-			// Контекст отменен
 			result.Cancelled = true
-			result.BytesWritten = bytesWritten
-			result.Duration = time.Since(startTime)
-			if result.Duration.Seconds() > 0 {
-				result.SpeedMBps = float64(bytesWritten) / (1024 * 1024) / result.Duration.Seconds()
-			}
-			pfw.config.Logger.Log("WARN", "Операция отменена", "disk", drivePath, "bytes_written", bytesWritten)
-			return result, ctx.Err()
+			return result, fmt.Errorf("операция отменена")
 		default:
 		}
 
-		// Запись буфера в файл
-		n, err := file.Write(buffer)
+		// Создаем новый файл
+		fileName := filepath.Join(tempDir, fmt.Sprintf("wipe_data_%d.bin", fileIndex))
+		fmt.Printf(">>> Создаю файл: %s\n", fileName)
+		file, err := os.Create(fileName)
 		if err != nil {
-			// Проверяем на ошибку "Недостаточно места на диске"
-			if system.IsDiskFullError(err) {
-				pfw.config.Logger.Log("INFO", "Диск заполнен", "disk", drivePath, "bytes_written", bytesWritten)
+			// Проверяем, не ошибка ли это "Недостаточно места"
+			if strings.Contains(err.Error(), "no space left") || strings.Contains(err.Error(), "disk full") {
+				// Диск заполнен - завершаем затирание
 				break
 			}
-			pfw.config.Logger.Log("ERROR", "Ошибка записи", "disk", drivePath, "error", err.Error())
-			return nil, fmt.Errorf("ошибка записи в файл: %w", err)
+			return nil, fmt.Errorf("ошибка создания файла %s: %w", fileName, err)
 		}
 
-		bytesWritten += uint64(n)
+		// Записываем данные блоками
+		for {
+			_, err := file.Write(buffer)
+			if err != nil {
+				file.Close()
+				// Проверяем, не ошибка ли это "Недостаточно места"
+				if strings.Contains(err.Error(), "no space left") || strings.Contains(err.Error(), "disk full") {
+					// Диск заполнен - завершаем затирание
+					goto cleanup
+				}
+				return nil, fmt.Errorf("ошибка записи в файл %s: %w", fileName, err)
+			}
+			bytesWritten += uint64(len(buffer))
+
+			// Отправляем прогресс каждые 100 МБ
+			if pfw.config.Progress != nil && bytesWritten%(100*1024*1024) == 0 {
+				progress := ProgressInfo{
+					BytesWritten: bytesWritten,
+					SpeedMBps:    float64(bytesWritten) / time.Since(startTime).Seconds() / (1024 * 1024),
+					Percentage:   0, // Не можем рассчитать без info о свободном месте
+					CurrentFile:  fileName,
+					StartTime:    startTime,
+				}
+				pfw.config.Progress <- progress
+			}
+		}
+
+		file.Close()
 		filesCreated++
+		fileIndex++
 
-		// Отправка прогресса
-		if pfw.config.Progress != nil {
-			progress := ProgressInfo{
-				BytesWritten: bytesWritten,
-				CurrentFile:  tempFile,
-			}
-
-			// Вычисление скорости
-			elapsed := time.Since(startTime).Seconds()
-			if elapsed > 0 {
-				progress.SpeedMBps = float64(bytesWritten) / (1024 * 1024) / elapsed
-			}
-
-			// Вычисление процента (если известен общий объем)
-			if diskInfo.FreeSize > 0 {
-				progress.Percentage = float64(bytesWritten) / float64(diskInfo.FreeSize) * 100
-			}
-
-			select {
-			case pfw.config.Progress <- progress:
-			case <-ctx.Done():
-				result.Cancelled = true
-				return result, ctx.Err()
-			default:
-				// Канал прогресса заблокирован, пропускаем
-			}
-		}
-
-		// Проверка максимальной длительности
-		if pfw.config.MaxDuration > 0 && time.Since(startTime) > pfw.config.MaxDuration {
-			result.Cancelled = true
-			pfw.config.Logger.Log("WARN", "Превышено максимальное время выполнения", "disk", drivePath)
-			break
-		}
+		// Выводим прогресс в консоль
+		writtenGB := float64(bytesWritten) / (1024 * 1024 * 1024)
+		fmt.Printf("+++ Записано: %.2f GB\n", writtenGB)
 	}
 
-	// ОБЯЗАТЕЛЬНО синхронизируем кэш с физическим носителем
-	if err := file.Sync(); err != nil {
-		pfw.config.Logger.Log("ERROR", "Ошибка синхронизации файла", "disk", drivePath, "error", err.Error())
-		return nil, fmt.Errorf("ошибка синхронизации файла: %w", err)
-	}
-
-	// Закрываем файл перед удалением
-	if err := file.Close(); err != nil {
-		pfw.config.Logger.Log("ERROR", "Ошибка закрытия файла", "disk", drivePath, "error", err.Error())
-		return nil, fmt.Errorf("ошибка закрытия файла: %w", err)
-	}
-
-	// Удаляем временный файл
-	if err := os.Remove(tempFile); err != nil {
-		pfw.config.Logger.Log("WARN", "Ошибка удаления временного файла", "disk", drivePath, "error", err.Error())
-		// Не считаем это критической ошибкой
-	}
+cleanup:
 
 	// Формирование результата
 	result.Success = true
@@ -187,18 +148,4 @@ func (pfw *PersistentFileWiper) Wipe(ctx context.Context, drivePath string) (*Wi
 		"bytes_written", bytesWritten, "duration", result.Duration, "speed_mbps", result.SpeedMBps)
 
 	return result, nil
-}
-
-// GetFreeSpacePersistent возвращает свободное место на диске в байтах
-func GetFreeSpacePersistent(drivePath string) (uint64, error) {
-	diskInfo, err := system.GetDiskInfoForPath(drivePath)
-	if err != nil {
-		return 0, err
-	}
-	return diskInfo.FreeSize, nil
-}
-
-// IsDiskWritablePersistent проверяет, доступен ли диск для записи
-func IsDiskWritablePersistent(drivePath string) bool {
-	return system.CheckWriteAccess(drivePath)
 }

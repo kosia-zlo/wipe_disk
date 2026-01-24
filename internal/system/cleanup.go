@@ -162,7 +162,9 @@ func CleanupBrowserCache() error {
 
 // CleanupOldLogs removes old log files
 func CleanupOldLogs(days int) error {
-	logsDir := "C:\\Windows\\Logs"
+	// Get system drive dynamically
+	systemDrive := getSystemDrive()
+	logsDir := filepath.Join(systemDrive, "Windows", "Logs")
 	cutoff := time.Now().AddDate(0, 0, -days)
 
 	var errors []string

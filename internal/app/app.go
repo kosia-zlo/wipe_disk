@@ -147,16 +147,14 @@ func (a *App) StartWipe(drive string) error {
 	// Set progress channel on engine
 	a.wipeEngine.SetProgressChannel(progressChan)
 
-	// Start wipe in background
-	go func() {
-		result, err := a.wipeEngine.WipeDrive(a.ctx, drive, nil)
-		if err != nil {
-			a.logger.Log("ERROR", "Wipe failed", "drive", drive, "error", err.Error())
-		} else {
-			a.logger.Log("INFO", "Wipe completed", "drive", drive, "bytesWritten", result.BytesWritten)
-		}
-	}()
+	// Start wipe and wait for completion
+	result, err := a.wipeEngine.WipeDrive(a.ctx, drive, nil)
+	if err != nil {
+		a.logger.Log("ERROR", "Wipe failed", "drive", drive, "error", err.Error())
+		return err
+	}
 
+	a.logger.Log("INFO", "Wipe completed successfully", "drive", drive, "bytesWritten", result.BytesWritten)
 	return nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"wipedisk_enterprise/internal/logging"
+	"wipedisk_enterprise/internal/system"
 )
 
 // Task представляет задачу по очистке системы
@@ -134,17 +135,19 @@ func NewTempCleanupTask(logger *logging.EnterpriseLogger) *TempCleanupTask {
 
 // Execute выполняет очистку временных файлов
 func (t *TempCleanupTask) Execute(ctx context.Context) error {
+	// Get system drive dynamically
+	systemDrive := system.GetSystemDrive()
 	tempPaths := []string{
 		os.TempDir(),
-		`C:\Windows\Temp`,
+		filepath.Join(systemDrive, "Windows", "Temp"),
 		// Windows 10/11 specific paths
-		`C:\Windows\SoftwareDistribution\Download`,                   // Кэш обновлений Windows
-		os.Getenv("LOCALAPPDATA") + `\Microsoft\Windows\Explorer`,    // Кэш эскизов и иконок
-		os.Getenv("LOCALAPPDATA") + `\Microsoft\Windows\INetCache`,   // Кэш Internet Explorer
-		os.Getenv("LOCALAPPDATA") + `\Microsoft\Windows\INetCookies`, // Cookies Internet Explorer
-		os.Getenv("LOCALAPPDATA") + `\Temp`,                          // Локальный temp
-		os.Getenv("TEMP"),                                            // Системный temp
-		os.Getenv("TMP"),                                             // Альтернативный temp
+		filepath.Join(systemDrive, "Windows", "SoftwareDistribution", "Download"), // Кэш обновлений Windows
+		os.Getenv("LOCALAPPDATA") + `\Microsoft\Windows\Explorer`,                 // Кэш эскизов и иконок
+		os.Getenv("LOCALAPPDATA") + `\Microsoft\Windows\INetCache`,                // Кэш Internet Explorer
+		os.Getenv("LOCALAPPDATA") + `\Microsoft\Windows\INetCookies`,              // Cookies Internet Explorer
+		os.Getenv("LOCALAPPDATA") + `\Temp`,                                       // Локальный temp
+		os.Getenv("TEMP"),                                                         // Системный temp
+		os.Getenv("TMP"),                                                          // Альтернативный temp
 	}
 
 	var totalErrors []string
@@ -306,7 +309,7 @@ func (t *SpoolerCleanupTask) Execute(ctx context.Context) error {
 	}
 
 	// Очищаем папку очереди печати
-	printerPath := `C:\Windows\System32\spool\PRINTERS`
+	printerPath := filepath.Join(system.GetSystemDrive(), "Windows", "System32", "spool", "PRINTERS")
 	_, errors := t.cleanSpoolerDirectory(ctx, printerPath)
 
 	if len(errors) > 0 {

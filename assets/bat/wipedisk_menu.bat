@@ -26,10 +26,10 @@ set "AVAILABLE_PROFILES="
 set "AVAILABLE_ENGINES="
 
 :: Получение версии WipeDisk
-for /f "tokens=*" %%i in ('..\..\wipedisk.exe --version 2^>nul') do set "VERSION=%%i"
+for /f "tokens=*" %%i in ('%~dp0..\..\wipedisk.exe --version 2^>nul') do set "VERSION=%%i"
 
 :: Получение доступных профилей
-for /f "tokens=2 delims=:" %%p in ('..\..\wipedisk.exe list-profiles 2^>nul') do (
+for /f "tokens=2 delims=:" %%p in ('%~dp0..\..\wipedisk.exe list-profiles 2^>nul') do (
     set "AVAILABLE_PROFILES=!AVAILABLE_PROFILES! %%p"
 )
 
@@ -37,7 +37,7 @@ for /f "tokens=2 delims=:" %%p in ('..\..\wipedisk.exe list-profiles 2^>nul') do
 set "AVAILABLE_ENGINES=internal sdelete-compatible cipher"
 
 :: Проверка типа диска
-for /f "tokens=3" %%t in ('..\..\wipedisk.exe info 2^>nul ^| find "C:"') do (
+for /f "tokens=2" %%t in ('%~dp0..\..\wipedisk.exe info 2^>nul ^| find "C:"') do (
     if /i "%%t"=="SSD" set "IS_SSD=true"
 )
 
@@ -94,7 +94,7 @@ echo      SECURE WIPE FREE SPACE
 echo ============================================
 echo.
 echo  Доступные диски:
-..\..\..\wipedisk.exe info
+%~dp0..\..\wipedisk.exe info
 echo.
 echo  Профили: !AVAILABLE_PROFILES!
 echo  Движки: !AVAILABLE_ENGINES!
@@ -120,7 +120,7 @@ goto wipe_menu
 :wipe_system_disk
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe info wipe C: --profile=balanced --engine=internal --allow-system-disk
+echo %~dp0..\..\wipedisk.exe wipe C: --profile=balanced --engine=internal --allow-system-disk
 echo.
 echo [WARNING] This will wipe free space on SYSTEM DISK C:
 echo [WARNING] This operation is IRREVERSIBLE
@@ -129,33 +129,33 @@ set /p "confirm=Вы уверены? (YES/NO): "
 if /i not "%confirm%"=="YES" goto wipe_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: wipe_system_disk, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe wipe C: --profile=balanced --engine=internal --allow-system-disk
+%~dp0..\..\wipedisk.exe wipe C: --profile=balanced --engine=internal --allow-system-disk
 pause
 goto main_menu
 
 :wipe_data_disk
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe info wipe D: --profile=balanced --engine=internal
+echo %~dp0..\..\wipedisk.exe wipe D: --profile=balanced --engine=internal
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto wipe_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: wipe_data_disk, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe wipe D: --profile=balanced --engine=internal
+%~dp0..\..\wipedisk.exe wipe D: --profile=balanced --engine=internal
 pause
 goto main_menu
 
 :wipe_all_disks
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe wipe --profile=balanced --engine=internal
+echo %~dp0..\..\wipedisk.exe wipe --profile=balanced --engine=internal
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto wipe_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: wipe_all_disks, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe wipe --profile=balanced --engine=internal
+%~dp0..\..\wipedisk.exe wipe --profile=balanced --engine=internal
 pause
 goto main_menu
 
@@ -174,13 +174,13 @@ if /i "%target_disk%"=="C:" set "allow_system_flag=--allow-system-disk"
 
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe wipe %target_disk% --profile=%wipe_profile% --engine=%wipe_engine% %allow_system_flag%
+echo %~dp0..\..\wipedisk.exe wipe %target_disk% --profile=%wipe_profile% --engine=%wipe_engine% %allow_system_flag%
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto wipe_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: custom_wipe, Target: %target_disk%, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe wipe %target_disk% --profile=%wipe_profile% --engine=%wipe_engine% %allow_system_flag%
+%~dp0..\..\wipedisk.exe wipe %target_disk% --profile=%wipe_profile% --engine=%wipe_engine% %allow_system_flag%
 pause
 goto main_menu
 
@@ -192,7 +192,7 @@ echo      SYSTEM MAINTENANCE
 echo ============================================
 echo.
 echo  Доступные планы:
-..\..\..\wipedisk.exe infowipedisk.exe maintenance --list-plans
+%~dp0..\..\wipedisk.exe maintenance --list-plans
 echo.
 echo  1.  Quick cleanup (15 min)
 echo  2.  Light monthly (30 min)
@@ -221,79 +221,79 @@ goto maintenance_menu
 :maint_quick
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=quick_cleanup --silent
+echo %~dp0..\..\wipedisk.exe maintenance --plan=quick_cleanup --silent
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto maintenance_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: maint_quick, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe maintenance --plan=quick_cleanup --silent
+%~dp0..\..\wipedisk.exe maintenance --plan=quick_cleanup --silent
 pause
 goto main_menu
 
 :maint_monthly
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=light_monthly
+echo %~dp0..\..\wipedisk.exe maintenance --plan=light_monthly
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto maintenance_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: maint_monthly, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=light_monthly
+%~dp0..\..\wipedisk.exe maintenance --plan=light_monthly
 pause
 goto main_menu
 
 :maint_quarterly
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=security_quarterly
+echo %~dp0..\..\wipedisk.exe maintenance --plan=security_quarterly
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto maintenance_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: maint_quarterly, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe maintenance --plan=security_quarterly
+%~dp0..\..\wipedisk.exe maintenance --plan=security_quarterly
 pause
 goto main_menu
 
 :maint_yearly
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=full_year
+echo %~dp0..\..\wipedisk.exe maintenance --plan=full_year
 echo.
 echo [WARNING] This will take up to 6 hours
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto maintenance_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: maint_yearly, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=full_year
+%~dp0..\..\wipedisk.exe maintenance --plan=full_year
 pause
 goto main_menu
 
 :maint_deep
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe info\wipedisk.exe maintenance --plan=deep_clean
+echo %~dp0..\..\wipedisk.exe maintenance --plan=deep_clean
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto maintenance_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: maint_deep, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=deep_clean
+%~dp0..\..\wipedisk.exe maintenance --plan=deep_clean
 pause
 goto main_menu
 
 :maint_verify
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=verify_only
+echo %~dp0..\..\wipedisk.exe maintenance --plan=verify_only
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto maintenance_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: maint_verify, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\..\wipedisk.exe info maintenance --plan=verify_only
+%~dp0..\..\wipedisk.exe maintenance --plan=verify_only
 pause
 goto main_menu
 
@@ -315,13 +315,13 @@ if /i "%custom_silent%"=="y" set "silent_flag=--silent"
 
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe maintenance --plan=%custom_plan% %parallel_flag% %silent_flag%
+echo %~dp0..\..\wipedisk.exe maintenance --plan=%custom_plan% %parallel_flag% %silent_flag%
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto maintenance_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: maint_custom, Plan: %custom_plan%, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\..\wipedisk.exe infowipedisk.exe maintenance --plan=%custom_plan% %parallel_flag% %silent_flag%
+%~dp0..\..\wipedisk.exe maintenance --plan=%custom_plan% %parallel_flag% %silent_flag%
 pause
 goto main_menu
 
@@ -358,40 +358,40 @@ goto verify_menu
 :verify_basic
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe verify --last-session --level=basic
+echo %~dp0..\..\wipedisk.exe verify --last-session --level=basic
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto verify_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: verify_basic, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\..\wipedisk.exe infowipedisk.exe verify --last-session --level=basic
+%~dp0..\..\wipedisk.exe verify --last-session --level=basic
 pause
 goto main_menu
 
 :verify_physical
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe verify --last-session --physical
+echo %~dp0..\..\wipedisk.exe verify --last-session --physical
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto verify_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: verify_physical, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\..\wipedisk.exe infowipedisk.exe verify --last-session --physical
+%~dp0..\..\wipedisk.exe verify --last-session --physical
 pause
 goto main_menu
 
 :verify_aggressive
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\..\wipedisk.exe infowipedisk.exe verify --last-session --level=aggressive
+echo %~dp0..\..\wipedisk.exe verify --last-session --level=aggressive
 echo.
 echo [WARNING] This may take up to 2 hours
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto verify_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: verify_aggressive, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe verify --last-session --level=aggressive
+%~dp0..\..\wipedisk.exe verify --last-session --level=aggressive
 pause
 goto main_menu
 
@@ -410,13 +410,13 @@ if not "%verify_output%"=="" set "output_flag=--report=%verify_output%"
 
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe verify --last-session --level=%verify_level% --format=%verify_format% %output_flag%
+echo %~dp0..\..\wipedisk.exe verify --last-session --level=%verify_level% --format=%verify_format% %output_flag%
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto verify_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: verify_custom, Level: %verify_level%, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe verify --last-session --level=%verify_level% --format=%verify_format% %output_flag%
+%~dp0..\..\wipedisk.exe verify --last-session --level=%verify_level% --format=%verify_format% %output_flag%
 pause
 goto main_menu
 
@@ -453,13 +453,13 @@ goto diagnose_menu
 :diag_quick
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe diagnose --quick
+echo %~dp0..\..\wipedisk.exe diagnose --quick
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto diagnose_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: diag_quick, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe diagnose --quick
+%~dp0..\..\wipedisk.exe diagnose --quick
 set "EXIT_CODE=%ERRORLEVEL%"
 pause
 goto main_menu
@@ -467,27 +467,27 @@ goto main_menu
 :diag_full
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe diagnose --full
+echo %~dp0..\..\wipedisk.exe diagnose --full
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto diagnose_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: diag_full, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe diagnose --full
+%~dp0..\..\wipedisk.exe diagnose --full
 pause
 goto main_menu
 
 :diag_deep
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe diagnose --deep
+echo %~dp0..\..\wipedisk.exe diagnose --deep
 echo.
 echo [WARNING] This may take up to 10 minutes
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto diagnose_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: diag_deep, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe diagnose --deep
+%~dp0..\..\wipedisk.exe diagnose --deep
 pause
 goto main_menu
 
@@ -511,13 +511,13 @@ set /p "specific_test=Тест для выполнения: "
 
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe diagnose --test=%specific_test%
+echo %~dp0..\..\wipedisk.exe diagnose --test=%specific_test%
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto diagnose_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: diag_specific, Test: %specific_test%, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe diagnose --test=%specific_test%
+%~dp0..\..\wipedisk.exe diagnose --test=%specific_test%
 pause
 goto main_menu
 
@@ -529,7 +529,7 @@ echo      CONFIGURE PROFILES
 echo ============================================
 echo.
 echo  Доступные профили:
-..\..\wipedisk.exe maintenance --list-plans
+%~dp0..\..\wipedisk.exe maintenance --list-plans
 echo.
 echo  1.  Show profile details
 echo  2.  Test profile performance
@@ -560,13 +560,13 @@ goto profiles_menu
 set /p "test_profile=Профиль для теста: "
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe wipe --dry-run --profile=%test_profile% D:
+echo %~dp0..\..\wipedisk.exe wipe --dry-run --profile=%test_profile% D:
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto profiles_menu
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: profile_test, Profile: %test_profile%, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe wipe --dry-run --profile=%test_profile% D:
+%~dp0..\..\wipedisk.exe wipe --dry-run --profile=%test_profile% D:
 pause
 goto profiles_menu
 
@@ -667,12 +667,12 @@ goto silent_mode
 :silent_quick
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe maintenance --plan=quick_cleanup --silent
+echo %~dp0..\..\wipedisk.exe maintenance --plan=quick_cleanup --silent
 echo.
 echo [INFO] This command is ready for GPO deployment
 echo.
 echo Copy this command for GPO:
-echo ..\..\wipedisk.exe maintenance --plan=quick_cleanup --silent
+echo %~dp0..\..\wipedisk.exe maintenance --plan=quick_cleanup --silent
 echo.
 pause
 goto main_menu
@@ -680,12 +680,12 @@ goto main_menu
 :silent_monthly
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe maintenance --plan=light_monthly --silent
+echo %~dp0..\..\wipedisk.exe maintenance --plan=light_monthly --silent
 echo.
 echo [INFO] This command is ready for GPO deployment
 echo.
 echo Copy this command for GPO:
-echo ..\..\wipedisk.exe maintenance --plan=light_monthly --silent
+echo %~dp0..\..\wipedisk.exe maintenance --plan=light_monthly --silent
 echo.
 pause
 goto main_menu
@@ -693,12 +693,12 @@ goto main_menu
 :silent_verify
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe maintenance --plan=verify_only --silent
+echo %~dp0..\..\wipedisk.exe maintenance --plan=verify_only --silent
 echo.
 echo [INFO] This command is ready for GPO deployment
 echo.
 echo Copy this command for GPO:
-echo ..\..\wipedisk.exe maintenance --plan=verify_only --silent
+echo %~dp0..\..\wipedisk.exe maintenance --plan=verify_only --silent
 echo.
 pause
 goto main_menu
@@ -714,12 +714,12 @@ set /p "silent_extra=Дополнительные флаги: "
 
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe maintenance --plan=%silent_plan% --silent %silent_extra%
+echo %~dp0..\..\wipedisk.exe maintenance --plan=%silent_plan% --silent %silent_extra%
 echo.
 echo [INFO] This command is ready for GPO deployment
 echo.
 echo Copy this command for GPO:
-echo ..\..\wipedisk.exe maintenance --plan=%silent_plan% --silent %silent_extra%
+echo %~dp0..\..\wipedisk.exe maintenance --plan=%silent_plan% --silent %silent_extra%
 echo.
 pause
 goto main_menu
@@ -754,39 +754,39 @@ goto dryrun_mode
 :dryrun_wipe
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe wipe --dry-run C: --profile=balanced --engine=internal --allow-system-disk
+echo %~dp0..\..\wipedisk.exe wipe --dry-run C: --profile=balanced --engine=internal --allow-system-disk
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto dryrun_mode
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: dryrun_wipe, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe wipe --dry-run C: --profile=balanced --engine=internal --allow-system-disk
+%~dp0..\..\wipedisk.exe wipe --dry-run C: --profile=balanced --engine=internal --allow-system-disk
 pause
 goto main_menu
 
 :dryrun_maint
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe maintenance --dry-run --plan=light_monthly
+echo %~dp0..\..\wipedisk.exe maintenance --dry-run --plan=light_monthly
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto dryrun_mode
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: dryrun_maint, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe maintenance --dry-run --plan=light_monthly
+%~dp0..\..\wipedisk.exe maintenance --dry-run --plan=light_monthly
 pause
 goto main_menu
 
 :dryrun_verify
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe verify --dry-run --level=basic
+echo %~dp0..\..\wipedisk.exe verify --dry-run --level=basic
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto dryrun_mode
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: dryrun_verify, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe verify --dry-run --level=basic
+%~dp0..\..\wipedisk.exe verify --dry-run --level=basic
 pause
 goto main_menu
 
@@ -800,13 +800,13 @@ set /p "dryrun_command=Команда для теста: "
 
 echo.
 echo [PREVIEW] Command to execute:
-echo ..\..\wipedisk.exe %dryrun_command% --dry-run
+echo %~dp0..\..\wipedisk.exe %dryrun_command% --dry-run
 echo.
 set /p "confirm=Вы уверены? (y/N): "
 if /i not "%confirm%"=="y" goto dryrun_mode
 
 echo [%DATE% %TIME%] User: %USERNAME%, Choice: dryrun_custom, Command: %dryrun_command%, ExitCode: %ERRORLEVEL% >> "%LOGFILE%"
-..\..\wipedisk.exe %dryrun_command% --dry-run
+%~dp0..\..\wipedisk.exe %dryrun_command% --dry-run
 pause
 goto main_menu
 

@@ -1,0 +1,12 @@
+version: "1.3.0"
+settings:
+  priority: "low"        # Для исключения тормозов системы
+  throttle_ms: 10        # Задержка для разгрузки диска
+  buffer_size_mb: 1      # Размер буфера
+profiles:
+  - name: "Enterprise Safe"
+    pattern: "random"
+    passes: 1
+  - name: "Deep Clean"
+    pattern: "dod_5220_22_m"
+    passes: 3

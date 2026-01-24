@@ -64,6 +64,9 @@ type Config struct {
 
 // Default возвращает конфигурацию по умолчанию
 func Default() *Config {
+	// Get system drive dynamically
+	systemDrive := getSystemDrive()
+
 	return &Config{
 		Security: struct {
 			RequireAdmin        bool     `yaml:"require_admin"`
@@ -77,10 +80,10 @@ func Default() *Config {
 			RequireConfirmation: true,
 			ExcludedDrives:      []string{"A:", "B:"},
 			ProtectedPaths: []string{
-				"C:\\Windows",
-				"C:\\Program Files",
-				"C:\\Program Files (x86)",
-				"C:\\Users",
+				filepath.Join(systemDrive, "Windows"),
+				filepath.Join(systemDrive, "Program Files"),
+				filepath.Join(systemDrive, "Program Files (x86)"),
+				filepath.Join(systemDrive, "Users"),
 			},
 		},
 		Wipe: struct {
@@ -327,4 +330,20 @@ func isAdmin() bool {
 	// Упрощенная проверка
 	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
 	return err == nil
+}
+
+// getSystemDrive возвращает системный диск (C:, D:, и т.д.)
+func getSystemDrive() string {
+	// Получаем путь к системной директории
+	windir := os.Getenv("WINDIR")
+	if windir == "" {
+		return "C:" // Fallback
+	}
+
+	// Извлекаем букву диска
+	if len(windir) >= 2 {
+		return windir[:2]
+	}
+
+	return "C:" // Fallback
 }

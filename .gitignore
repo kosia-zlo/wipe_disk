@@ -6,7 +6,6 @@
 
 # Build artifacts
 /build/
-/dist/
 /release/
 
 # Logs

@@ -16,10 +16,12 @@ func CleanUpdateCache(ctx context.Context, logger *logging.EnterpriseLogger) (ui
 	logger.Log("INFO", "Очистка кэша Windows Update")
 
 	var totalCleaned uint64
+	// Get system drive dynamically
+	systemDrive := getSystemDrive()
 	paths := []string{
-		`C:\Windows\SoftwareDistribution\Download`,
-		`C:\Windows\SoftwareDistribution\DataStore`,
-		`C:\Windows\wsus`,
+		filepath.Join(systemDrive, "Windows", "SoftwareDistribution", "Download"),
+		filepath.Join(systemDrive, "Windows", "SoftwareDistribution", "DataStore"),
+		filepath.Join(systemDrive, "Windows", "wsus"),
 	}
 
 	for _, path := range paths {

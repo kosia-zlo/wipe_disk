@@ -16,8 +16,8 @@ func CleanTempFiles(ctx context.Context, logger *logging.EnterpriseLogger, dryRu
 	paths := []string{
 		os.TempDir(),
 		filepath.Join(os.Getenv("LOCALAPPDATA"), "Temp"),
-		`C:\Windows\Temp`,
-		`C:\Windows\Prefetch`,
+		filepath.Join(getSystemDrive(), "Windows", "Temp"),
+		filepath.Join(getSystemDrive(), "Windows", "Prefetch"),
 	}
 
 	for _, path := range paths {

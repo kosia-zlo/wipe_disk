@@ -15,20 +15,31 @@ import (
 func GetDiskInfo(verbose bool) ([]DiskInfo, error) {
 	var disks []DiskInfo
 
-	// Get all logical drives
-	drives := getLogicalDrives()
+	// Direct A-Z enumeration for maximum compatibility
+	for c := 'A'; c <= 'Z'; c++ {
+		drive := string(c) + ":"
+		driveType := windows.GetDriveType(windows.StringToUTF16Ptr(drive))
 
-	for _, drive := range drives {
-		if !isLocalDrive(drive) {
-			continue // Skip network drives
+		// Skip non-existent drives
+		if driveType == windows.DRIVE_NO_ROOT_DIR || driveType == windows.DRIVE_UNKNOWN {
+			continue
 		}
 
-		info, err := getDriveInfo(drive)
-		if err != nil {
-			continue // Skip inaccessible drives
-		}
+		// Include all valid drive types
+		if driveType == windows.DRIVE_FIXED || driveType == windows.DRIVE_REMOVABLE ||
+			driveType == windows.DRIVE_REMOTE || driveType == windows.DRIVE_RAMDISK ||
+			driveType == windows.DRIVE_CDROM {
 
-		disks = append(disks, info)
+			info, err := getDriveInfo(drive, driveType)
+			if err != nil {
+				if verbose {
+					fmt.Printf("[WARN] Skipping drive %s: %v\n", drive, err)
+				}
+				continue // Skip inaccessible drives
+			}
+
+			disks = append(disks, info)
+		}
 	}
 
 	return disks, nil
@@ -66,7 +77,8 @@ func GetDiskSpace(drive string, verbose bool) (uint64, uint64) {
 // isLocalDrive checks if drive is local (not network)
 func isLocalDrive(drive string) bool {
 	driveType := windows.GetDriveType(windows.StringToUTF16Ptr(drive))
-	return driveType == windows.DRIVE_FIXED
+	return driveType == windows.DRIVE_FIXED || driveType == windows.DRIVE_REMOVABLE ||
+		driveType == windows.DRIVE_RAMDISK || driveType == windows.DRIVE_CDROM
 }
 
 // getLogicalDrives gets list of logical drives
@@ -106,10 +118,10 @@ func getLogicalDrives() []string {
 }
 
 // getDriveInfo gets detailed drive information
-func getDriveInfo(drive string) (DiskInfo, error) {
+func getDriveInfo(drive string, driveType uint32) (DiskInfo, error) {
 	info := DiskInfo{
 		Letter:     drive,
-		Type:       "Unknown",
+		Type:       getDriveTypeName(driveType),
 		IsSystem:   isSystemDrive(drive),
 		IsWritable: true,
 		Model:      "Unknown Model",
@@ -122,11 +134,24 @@ func getDriveInfo(drive string) (DiskInfo, error) {
 	info.FreeSize = freeSize
 	info.TotalSize = totalSize
 
-	// Determine disk type (simplified)
-	if info.IsSystem {
-		info.Type = "SSD" // Assume SSD for system drive
-	} else {
-		info.Type = "HDD" // Assume HDD for other drives
+	// Determine disk type based on Windows drive type
+	switch driveType {
+	case windows.DRIVE_FIXED:
+		if info.IsSystem {
+			info.Type = "SSD" // Assume SSD for system drive
+		} else {
+			info.Type = "HDD" // Assume HDD for other fixed drives
+		}
+	case windows.DRIVE_REMOVABLE:
+		info.Type = "USB/Flash"
+	case windows.DRIVE_CDROM:
+		info.Type = "CD/DVD"
+	case windows.DRIVE_RAMDISK:
+		info.Type = "RAM Disk"
+	case windows.DRIVE_REMOTE:
+		info.Type = "Network"
+	default:
+		info.Type = "Unknown"
 	}
 
 	// Check write access
@@ -137,12 +162,9 @@ func getDriveInfo(drive string) (DiskInfo, error) {
 
 // isSystemDrive checks if drive is system drive
 func isSystemDrive(drive string) bool {
-	windir := strings.ToUpper(os.Getenv("WINDIR"))
-	if windir == "" {
-		windir = "C:\\WINDOWS"
-	}
-
-	return strings.HasPrefix(windir, strings.ToUpper(drive))
+	// Get system drive dynamically
+	systemDrive := getSystemDrive()
+	return strings.EqualFold(drive, systemDrive)
 }
 
 // checkWriteAccess checks write access to drive
@@ -172,80 +194,67 @@ func ValidateDrive(drive string) error {
 		return fmt.Errorf("пустой путь к диску")
 	}
 
-	// Normalize drive path
-	drive = normalizePath(drive)
+	// Normalize drive path (removes trailing dots, spaces, etc.)
+	normalizedDrive := normalizePath(drive)
 
 	// Get all available drives
-	availableDrives := getLogicalDrives()
+	availableDrives := GetAvailableDrives()
 
 	// Check if requested drive exists
 	for _, availableDrive := range availableDrives {
-		if normalizePath(availableDrive) == drive {
+		if normalizePath(availableDrive.Letter) == normalizedDrive {
 			// Check if drive is accessible
-			if _, err := os.Stat(drive + "\\"); err != nil {
-				return fmt.Errorf("диск %s недоступен: %w", drive, err)
+			if _, err := os.Stat(normalizedDrive + "\\"); err != nil {
+				return fmt.Errorf("диск %s недоступен: %w", normalizedDrive, err)
 			}
 			return nil
 		}
 	}
 
 	// Drive not found, show error with available options
+	var driveLetters []string
+	for _, availableDrive := range availableDrives {
+		driveLetters = append(driveLetters, availableDrive.Letter)
+	}
 	return fmt.Errorf("ошибка: путь %s недоступен. Пожалуйста, выберите диск из списка доступных: %v",
-		drive, availableDrives)
+		normalizedDrive, driveLetters)
 }
 
 // GetAvailableDrives returns list of available local drives with types
 func GetAvailableDrives() []DriveInfo {
 	var drives []DriveInfo
 
-	// Use Windows API to get drive strings
-	buffer := make([]uint16, 256)
-	_, err := windows.GetLogicalDriveStrings(uint32(len(buffer)), &buffer[0])
-	if err != nil {
-		// Fallback to simple method
-		for c := 'A'; c <= 'Z'; c++ {
-			drive := string(c) + ":"
-			if _, err := os.Stat(drive + "\\"); err == nil {
-				driveType := windows.GetDriveType(windows.StringToUTF16Ptr(drive))
-				if driveType == windows.DRIVE_FIXED || driveType == windows.DRIVE_REMOVABLE {
-					drives = append(drives, DriveInfo{
-						Letter:   drive,
-						Type:     getDriveTypeName(driveType),
-						IsSystem: isSystemDrive(drive),
-					})
-				}
-			}
-		}
-		return drives
-	}
-
-	// Parse buffer (null-separated drive strings)
-	driveStr := windows.UTF16PtrToString(&buffer[0])
-	for _, drive := range strings.Split(driveStr, "\x00") {
-		if drive == "" {
-			continue
-		}
-
-		// Check if drive is accessible
-		if _, err := os.Stat(drive + "\\"); err != nil {
-			continue
-		}
-
-		// Get drive type
+	// Direct A-Z enumeration for maximum compatibility
+	for c := 'A'; c <= 'Z'; c++ {
+		drive := string(c) + ":"
 		driveType := windows.GetDriveType(windows.StringToUTF16Ptr(drive))
-		if driveType != windows.DRIVE_FIXED && driveType != windows.DRIVE_REMOVABLE {
+
+		// Skip non-existent drives
+		if driveType == windows.DRIVE_NO_ROOT_DIR || driveType == windows.DRIVE_UNKNOWN {
 			continue
 		}
 
-		// Get free space
-		freeSpace, _ := GetDiskSpace(drive, false)
+		// Include all valid drive types
+		if driveType == windows.DRIVE_FIXED || driveType == windows.DRIVE_REMOVABLE ||
+			driveType == windows.DRIVE_REMOTE || driveType == windows.DRIVE_RAMDISK ||
+			driveType == windows.DRIVE_CDROM {
 
-		drives = append(drives, DriveInfo{
-			Letter:   drive,
-			Type:     getDriveTypeName(driveType),
-			IsSystem: isSystemDrive(drive),
-			FreeSize: freeSpace,
-		})
+			// Get free space
+			freeSpace, totalSpace := GetDiskSpace(drive, false)
+
+			// Mark as [Not Ready] if total space is 0 (unformatted or inaccessible)
+			driveTypeStr := getDriveTypeName(driveType)
+			if totalSpace == 0 {
+				driveTypeStr += " [Not Ready]"
+			}
+
+			drives = append(drives, DriveInfo{
+				Letter:   drive,
+				Type:     driveTypeStr,
+				IsSystem: isSystemDrive(drive),
+				FreeSize: freeSpace,
+			})
+		}
 	}
 
 	return drives
@@ -270,6 +279,8 @@ func getDriveTypeName(driveType uint32) string {
 		return "CD-ROM"
 	case windows.DRIVE_RAMDISK:
 		return "RAM Disk"
+	case windows.DRIVE_REMOTE:
+		return "Network Drive"
 	default:
 		return "Unknown"
 	}
@@ -469,17 +480,40 @@ func GetDiskInfoForPath(drivePath string) (DiskInfo, error) {
 	}, nil
 }
 
+// NormalizePath нормализует путь к диску (публичная функция)
+func NormalizePath(path string) string {
+	return normalizePath(path)
+}
+
 // normalizePath нормализует путь к диску
 func normalizePath(path string) string {
+	// Remove trailing dots, spaces, and invalid characters
+	path = strings.TrimRight(path, ". ")
+
+	// Handle single letter (e.g., "F")
 	if len(path) == 1 {
-		return path + ":"
+		return strings.ToUpper(path) + ":"
 	}
+
+	// Handle letter with colon (e.g., "F:")
 	if len(path) == 2 && path[1] == ':' {
-		return path
+		return strings.ToUpper(path)
 	}
+
+	// Handle letter with colon and slash (e.g., "F:\\" or "F:/")
 	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
-		return path[:2]
+		return strings.ToUpper(path[:2])
 	}
+
+	// Handle UNC path (e.g., "\\.\\F:")
+	if strings.HasPrefix(path, "\\.\\") && len(path) >= 5 {
+		part := strings.TrimPrefix(path, "\\.\\")
+		if len(part) >= 2 && part[1] == ':' {
+			return strings.ToUpper(part[:2])
+		}
+	}
+
+	// Return as-is if no pattern matches
 	return path
 }
 

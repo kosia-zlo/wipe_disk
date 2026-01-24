@@ -341,8 +341,11 @@ func GetDefaultSystemDiskPolicy() *SystemDiskPolicy {
 
 // PrepareSystemDiskWipe готовит системный диск к безопасному затиранию
 func PrepareSystemDiskWipe(disk string, allowSystemDisk bool, logger *logging.EnterpriseLogger) (*SystemDiskPolicy, error) {
+	// Get system drive dynamically
+	systemDrive := system.GetSystemDrive()
+
 	// Проверяем, что это системный диск
-	if !strings.EqualFold(disk, "C:") && !strings.EqualFold(disk, "C:\\") {
+	if !strings.EqualFold(disk, systemDrive) && !strings.EqualFold(disk, systemDrive+"\\") {
 		return nil, nil // Не системный диск, политика не нужна
 	}
 
